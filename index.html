@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="pt" class="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight Track Viewer — NAV Portugal</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;600;800&display=swap');
+:root{--bg:#0a0e17;--panel:#111827;--border:#1e2d45;--accent:#00c8ff;--text:#e2e8f0;--muted:#64748b;--green:#22d3a0;--red:#f87171;--purple:#a78bfa;--blue:#60a5fa;}
+:root.light{--bg:#f0f4f8;--panel:#ffffff;--border:#cbd5e1;--accent:#0284c7;--text:#1e293b;--muted:#94a3b8;--green:#059669;--red:#dc2626;--purple:#7c3aed;--blue:#2563eb;}
+:root.light .leaflet-popup-content-wrapper{background:#fff!important;border-color:var(--accent)!important;color:var(--text)!important;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'JetBrains Mono',monospace;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+
+/* HEADER */
+header{background:var(--panel);border-bottom:1px solid var(--border);padding:0 16px;height:50px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;}
+.logo span{color:var(--muted);font-weight:400;}
+.hdr-right{display:flex;gap:8px;align-items:center;}
+.btn{font-family:'JetBrains Mono',monospace;font-size:11px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;letter-spacing:1px;text-transform:uppercase;transition:all .2s;border-radius:3px;white-space:nowrap;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn.primary{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600;}
+.btn.primary:hover{background:#00e5ff;}
+.btn.toggled{background:rgba(0,200,255,.15);border-color:var(--accent);color:var(--accent);}
+.btn.danger{border-color:#f87171;color:#f87171;}
+.btn.danger:hover{background:rgba(248,113,113,.1);}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;margin-right:6px;}
+.dot.on{background:var(--green);box-shadow:0 0 6px var(--green);}
+
+/* LAYOUT */
+.main{display:flex;flex:1;overflow:hidden;}
+
+/* SIDEBAR */
+.sidebar{width:260px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;}
+.sb-hdr{padding:10px 14px;border-bottom:1px solid var(--border);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:600;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.sb-section{padding:8px 10px;border-bottom:1px solid var(--border);overflow-y:auto;flex-shrink:0;}
+.sb-date-scroll{overflow-y:auto;flex:0 1 auto;max-height:50vh;border-bottom:1px solid var(--border);}
+.sb-section-lbl{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600;}
+
+/* DATE PICKER */
+.day-grid{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;}
+.day-btn{font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px 7px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;border-radius:3px;transition:all .15s;letter-spacing:.5px;}
+.day-btn:hover{border-color:var(--accent);color:var(--accent);}
+.day-btn.sel{background:rgba(0,200,255,.12);border-color:var(--accent);color:var(--accent);font-weight:600;}
+.block-grid{display:flex;flex-wrap:wrap;gap:3px;}
+.block-btn{font-family:'JetBrains Mono',monospace;font-size:9px;padding:3px 6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;border-radius:3px;transition:all .15s;}
+.block-btn:hover{border-color:var(--green);color:var(--green);}
+.block-btn.sel{background:rgba(34,211,160,.1);border-color:var(--green);color:var(--green);font-weight:600;}
+.block-btn.nodata{opacity:.3;cursor:default;pointer-events:none;}
+
+/* FLIGHT LIST */
+.sb-search{padding:7px 9px;border-bottom:1px solid var(--border);}
+.sb-search input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:6px 9px;border-radius:3px;outline:none;}
+.sb-search input:focus{border-color:var(--accent);}
+.sb-search input::placeholder{color:var(--muted);}
+.flight-list{flex:1;overflow-y:auto;padding:5px;}
+.flight-list::-webkit-scrollbar{width:4px;}
+.flight-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.sb-date-scroll::-webkit-scrollbar{width:4px;}
+.sb-date-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.fi{padding:9px 10px;border-radius:4px;cursor:pointer;margin-bottom:3px;border:1px solid transparent;transition:all .15s;display:flex;align-items:center;gap:8px;}
+.fi:hover{background:rgba(0,200,255,.05);border-color:var(--border);}
+.fi.on{background:rgba(0,200,255,.08);border-color:var(--accent);}
+.fi-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.fi-info{flex:1;min-width:0;}
+.fi-csn{font-size:12px;font-weight:600;font-family:'Syne',sans-serif;letter-spacing:1px;}
+.fi-meta{font-size:10px;color:var(--muted);margin-top:1px;}
+.fi-chk{width:15px;height:15px;border:1px solid var(--border);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--accent);flex-shrink:0;}
+.fi.on .fi-chk{background:var(--accent);color:var(--bg);border-color:var(--accent);}
+.sb-foot{padding:7px 9px;border-top:1px solid var(--border);display:flex;gap:6px;}
+
+/* CONTENT */
+.content{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.statsbar{display:flex;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;}
+.si{padding:7px 18px;border-right:1px solid var(--border);flex-shrink:0;}
+.si-lbl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:2px;}
+.si-val{font-size:13px;font-weight:600;font-family:'Syne',sans-serif;color:var(--accent);}
+.tabs{display:flex;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;}
+.tab{padding:11px 18px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;font-weight:600;}
+.tab:hover{color:var(--text);}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent);}
+.panel{display:none;flex:1;overflow:hidden;}
+.panel.on{display:flex;flex-direction:column;}
+#map{flex:1;background:#0d1117;}
+.tbl-toolbar{display:flex;align-items:center;gap:10px;padding:7px 14px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;}
+.tbl-wrap{flex:1;overflow:auto;}
+.tbl-wrap::-webkit-scrollbar{width:6px;height:6px;}
+.tbl-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+table{width:100%;border-collapse:collapse;font-size:11px;}
+th{background:var(--panel);color:var(--muted);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;padding:7px 12px;text-align:left;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;font-weight:600;}
+td{padding:6px 12px;border-bottom:1px solid rgba(30,45,69,.4);white-space:nowrap;}
+tr:hover td{background:rgba(0,200,255,.03);}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;font-family:'Syne',sans-serif;}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;color:var(--muted);}
+.empty-ico{font-size:44px;opacity:.3;}
+.empty-ttl{font-family:'Syne',sans-serif;font-size:15px;font-weight:600;color:var(--text);opacity:.4;}
+.empty-sub{font-size:11px;letter-spacing:1px;text-transform:uppercase;}
+
+/* POPUP */
+.leaflet-popup-content-wrapper{background:var(--panel)!important;border:1px solid var(--accent)!important;border-radius:4px!important;box-shadow:0 4px 20px rgba(0,200,255,.15)!important;color:var(--text)!important;font-family:'JetBrains Mono',monospace!important;font-size:11px!important;padding:0!important;}
+.leaflet-popup-content{margin:0!important;}
+.leaflet-popup-tip{background:var(--panel)!important;}
+.pu{padding:11px 13px;min-width:185px;}
+.pu-csn{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;margin-bottom:7px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.pu-row{display:flex;justify-content:space-between;gap:14px;margin:3px 0;}
+.pu-lbl{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px;}
+.pu-val{font-weight:600;}
+
+/* POINTS PANEL */
+.pts-layout{display:flex;flex:1;overflow:hidden;}
+.pts-sidebar{width:300px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;}
+.pts-main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.pts-list{flex:1;overflow-y:auto;padding:6px;}
+.pts-list::-webkit-scrollbar{width:4px;}
+.pts-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.pt-item{padding:9px 11px;border-radius:4px;cursor:pointer;margin-bottom:3px;border:1px solid transparent;transition:all .15s;}
+.pt-item:hover{border-color:var(--border);background:rgba(0,200,255,.04);}
+.pt-item.sel{border-color:var(--accent);background:rgba(0,200,255,.08);}
+.pt-name{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:1px;}
+.pt-coords{font-size:10px;color:var(--muted);margin-top:2px;}
+.pt-type{font-size:9px;padding:1px 6px;border-radius:2px;display:inline-block;margin-top:3px;letter-spacing:1px;text-transform:uppercase;}
+.pt-type.aip{background:rgba(0,200,255,.12);color:var(--accent);}
+.pt-type.user{background:rgba(34,211,160,.12);color:var(--green);}
+.input-row{display:flex;gap:6px;align-items:center;}
+.inp{font-family:'JetBrains Mono',monospace;font-size:11px;padding:5px 9px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:3px;outline:none;width:100%;}
+.inp:focus{border-color:var(--accent);}
+.inp::placeholder{color:var(--muted);}
+.inp-sm{width:80px;flex-shrink:0;}
+.pts-result-hdr{padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:12px;}
+.pts-result-wrap{flex:1;overflow:auto;}
+.pts-result-wrap::-webkit-scrollbar{width:6px;height:6px;}
+.pts-result-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+.radius-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+
+/* UPLOAD */
+.upload-ov{position:fixed;inset:0;background:linear-gradient(135deg,#e8f4fd 0%,#dbeafe 50%,#ede9fe 100%);display:flex;align-items:center;justify-content:center;z-index:1000;}
+.upload-box{background:#ffffff;border:2px dashed #93c5fd;border-radius:12px;padding:36px 40px;text-align:center;transition:all .2s;width:700px;max-width:95vw;box-shadow:0 20px 60px rgba(59,130,246,.15),0 4px 16px rgba(0,0,0,.08);}
+.upload-box.drag{border-color:#3b82f6;background:#eff6ff;}
+.upload-box h2{font-family:'Syne',sans-serif;font-size:22px;margin-bottom:6px;font-weight:800;color:#1e3a5f;}
+.upload-box p{color:#64748b;font-size:11px;margin-bottom:16px;letter-spacing:1px;line-height:1.6;}
+.upload-card{border:1px solid #e2e8f0;border-radius:8px;padding:18px 14px;text-align:center;display:flex;flex-direction:column;align-items:center;background:#f8fafc;transition:all .2s;}
+.upload-card:hover{border-color:#3b82f6;background:#eff6ff;box-shadow:0 2px 12px rgba(59,130,246,.12);}
+.upload-card-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;margin-bottom:6px;color:#1e3a5f;}
+.upload-card-desc{font-size:10px;color:#64748b;margin-bottom:12px;line-height:1.6;flex:1;}
+.upload-card-desc b{color:#2563eb;}
+.upload-btn-file{cursor:pointer;display:block;font-size:10px;width:100%;background:#2563eb;color:#fff;border:none;border-radius:4px;padding:7px 10px;font-family:'JetBrains Mono',monospace;letter-spacing:1px;text-transform:uppercase;font-weight:600;transition:all .2s;}
+.upload-btn-file:hover{background:#1d4ed8;}
+.upload-hint{background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 14px;font-size:10px;color:#475569;margin-top:14px;text-align:left;line-height:1.8;}
+.upload-hint b{color:#2563eb;}
+.upload-plane{font-size:48px;margin-bottom:12px;display:block;filter:drop-shadow(0 4px 8px rgba(59,130,246,.2));}
+
+/* PROGRESS */
+.progress-bar-wrap{background:var(--border);border-radius:3px;height:4px;margin-top:12px;overflow:hidden;display:none;}
+.progress-bar{height:100%;background:var(--accent);transition:width .3s;width:0%;}
+
+/* MODAL */
+.modal-ov{position:fixed;inset:0;background:rgba(10,14,23,.88);z-index:2000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+.modal-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:26px 30px;min-width:440px;max-width:540px;box-shadow:0 8px 40px rgba(0,0,0,.6);}
+.modal-ttl{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;margin-bottom:4px;color:var(--accent);}
+.modal-sub{font-size:11px;color:var(--muted);margin-bottom:18px;letter-spacing:1px;}
+.exp-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:18px;}
+.exp-f{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:4px;cursor:pointer;transition:all .15s;font-size:11px;color:var(--text);user-select:none;}
+.exp-f:hover{border-color:var(--accent);}
+.exp-f.on{border-color:var(--accent);background:rgba(0,200,255,.08);color:var(--accent);}
+.modal-foot{border-top:1px solid var(--border);padding-top:14px;display:flex;gap:8px;justify-content:flex-end;align-items:center;}
+
+/* LOADED FILES TAG */
+.file-tag{display:inline-flex;align-items:center;gap:5px;background:rgba(0,200,255,.08);border:1px solid var(--accent);border-radius:3px;padding:2px 7px;font-size:10px;color:var(--accent);margin:2px;}
+</style>
+</head>
+<body>
+
+<!-- UPLOAD OVERLAY -->
+<div class="upload-ov" id="uploadOv">
+  <div class="upload-box" id="dropZone">
+    <span class="upload-plane">✈️</span>
+    <h2>Flight Track Viewer</h2>
+    <p style="margin-bottom:20px;color:#64748b;">Escolhe como queres carregar os dados de voo:</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div class="upload-card">
+        <div style="font-size:32px;margin-bottom:10px;">📁</div>
+        <div class="upload-card-title">Uma pasta</div>
+        <div class="upload-card-desc">Lê todos os CSV dentro de <b>uma pasta</b></div>
+        <label for="fileInDir" class="upload-btn-file">Seleccionar pasta</label>
+        <input type="file" id="fileInDir" accept=".csv,.xlsx,.xls" multiple webkitdirectory style="display:none">
+      </div>
+      <div class="upload-card">
+        <div style="font-size:32px;margin-bottom:10px;">🗂️</div>
+        <div class="upload-card-title">Pasta raiz</div>
+        <div class="upload-card-desc">Lê CSV em <b>todas as subpastas</b> (dia/hora)</div>
+        <label for="fileInRoot" class="upload-btn-file">Seleccionar pasta raiz</label>
+        <input type="file" id="fileInRoot" accept=".csv,.xlsx,.xls" multiple webkitdirectory style="display:none">
+      </div>
+      <div class="upload-card">
+        <div style="font-size:32px;margin-bottom:10px;">📄</div>
+        <div class="upload-card-title">Ficheiros</div>
+        <div class="upload-card-desc">Selecciona <b>ficheiros individuais</b> (Ctrl+clique)</div>
+        <label for="fileIn" class="upload-btn-file">Seleccionar ficheiros</label>
+        <input type="file" id="fileIn" accept=".xlsx,.xls,.csv" multiple style="display:none">
+      </div>
+    </div>
+    <div class="upload-hint">
+      <b>Drag &amp; drop:</b> arrasta uma pasta ou ficheiros directamente para aqui<br>
+      <b>Nome esperado:</b> EVL_lisTO_<b>AAMMDD</b>_<b>HH-HH</b>.csv → dia e bloco horário detectados automaticamente
+    </div>
+    <div class="progress-bar-wrap" id="progressWrap" style="background:#dbeafe;">
+      <div class="progress-bar" id="progressBar" style="background:#2563eb;"></div>
+    </div>
+    <p id="progressTxt" style="margin-top:8px;font-size:10px;color:#2563eb;display:none;"></p>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-ov" id="exportModal">
+  <div class="modal-box">
+    <div class="modal-ttl">↓ Exportar CSV</div>
+    <div class="modal-sub">Selecciona os campos. Apenas voos visíveis são exportados.</div>
+    <div class="exp-grid" id="expFields"></div>
+    <div class="modal-foot">
+      <span id="expCount" style="font-size:11px;color:var(--muted);margin-right:auto;"></span>
+      <button class="btn" onclick="expSelAll(true)">Todos</button>
+      <button class="btn" onclick="expSelAll(false)">Nenhum</button>
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="doExport()">↓ Descarregar</button>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">NAV <span>Portugal</span> / Flight Track Viewer</div>
+  <div class="hdr-right">
+    <span class="dot" id="sDot"></span>
+    <span style="font-size:11px;color:var(--muted);" id="sTxt">Sem dados</span>
+    <button class="btn toggled" id="coordBtn" onclick="toggleCoords()" title="Alternar formato de coordenadas">📐 Decimais</button>
+    <button class="btn" id="themeBtn" onclick="toggleTheme()" title="Alternar modo claro/escuro">☀️ Claro</button>
+    <button class="btn" onclick="openExportModal()">↓ Exportar CSV</button>
+    <button class="btn" onclick="document.getElementById('addDir').click()">↑ Pasta</button>
+    <button class="btn" onclick="document.getElementById('addFiles').click()">↑ Ficheiros</button>
+    <button class="btn danger" onclick="clearAll()">✕ Limpar</button>
+    <input type="file" id="addDir" accept=".csv,.xlsx,.xls" multiple webkitdirectory style="display:none">
+    <input type="file" id="addFiles" accept=".xlsx,.xls,.csv" multiple style="display:none">
+  </div>
+</header>
+
+<div class="main">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- DATE FILTER -->
+    <div class="sb-hdr" style="flex-shrink:0;">Filtro de datas</div>
+    <div class="sb-date-scroll" id="daySection">
+      <div style="padding:8px 10px;">
+        <div class="sb-section-lbl">Dias disponíveis</div>
+        <div class="day-grid" id="dayGrid"><span style="font-size:10px;color:var(--muted);">—</span></div>
+        <div class="sb-section-lbl" style="margin-top:8px;">Blocos horários</div>
+        <div class="block-grid" id="blockGrid"><span style="font-size:10px;color:var(--muted);">—</span></div>
+        <div style="display:flex;gap:5px;margin-top:8px;">
+          <button class="btn" style="flex:1;font-size:9px;padding:4px 6px;" onclick="selDays(true)">Todos dias</button>
+          <button class="btn" style="flex:1;font-size:9px;padding:4px 6px;" onclick="selBlocks(true)">Todos blocos</button>
+        </div>
+      </div>
+    </div>
+    <div style="padding:6px 10px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <button class="btn primary" style="width:100%;font-size:10px;" onclick="applyFilter()">▶ Aplicar filtro</button>
+    </div>
+
+    <!-- FLIGHT SEARCH + ARR/DEP FILTER -->
+    <div class="sb-search"><input type="text" id="fSearch" placeholder="🔍 TAP, KLM, BAW... (aplica com ▶)" oninput="filterFlights()"></div>
+    <div style="padding:6px 8px;border-bottom:1px solid var(--border);display:flex;gap:4px;flex-shrink:0;">
+      <button class="btn toggled" id="fBtnAll"  style="flex:1;font-size:9px;padding:3px 4px;" onclick="setFlightTypeFilter('all')">Todos</button>
+      <button class="btn"         id="fBtnArr"  style="flex:1;font-size:9px;padding:3px 4px;" onclick="setFlightTypeFilter('arr')">▼ Arr</button>
+      <button class="btn"         id="fBtnDep"  style="flex:1;font-size:9px;padding:3px 4px;" onclick="setFlightTypeFilter('dep')">▲ Dep</button>
+      <button class="btn"         id="fBtnLvl"  style="flex:1;font-size:9px;padding:3px 4px;" onclick="setFlightTypeFilter('lvl')">— Nível</button>
+    </div>
+    <div class="sb-hdr" style="justify-content:space-between;">
+      Voos <span id="fCount" style="color:var(--accent)"></span>
+    </div>
+    <div class="flight-list" id="fList">
+      <div style="padding:20px;text-align:center;color:var(--muted);font-size:11px;">Carrega ficheiros CSV para começar</div>
+    </div>
+    <div class="sb-foot">
+      <button class="btn" style="flex:1;font-size:10px;" onclick="selAll(true)">Todos</button>
+      <button class="btn" style="flex:1;font-size:10px;" onclick="selAll(false)">Nenhum</button>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+    <div class="statsbar" id="statsBar" style="display:none">
+      <div class="si"><div class="si-lbl">Ficheiros</div><div class="si-val" id="stFiles">0</div></div>
+      <div class="si"><div class="si-lbl">Voos visíveis</div><div class="si-val" id="stF">0</div></div>
+      <div class="si"><div class="si-lbl">Total pontos</div><div class="si-val" id="stP">0</div></div>
+      <div class="si"><div class="si-lbl">Alt. máx (ft)</div><div class="si-val" id="stA">—</div></div>
+      <div class="si"><div class="si-lbl">Vel. máx (kt)</div><div class="si-val" id="stV">—</div></div>
+      <div class="si"><div class="si-lbl">Período</div><div class="si-val" id="stD">—</div></div>
+    </div>
+    <div class="tabs">
+      <div class="tab on" onclick="switchTab('map',this)">🗺 Mapa</div>
+      <div class="tab" onclick="switchTab('tbl',this)">📋 Dados por tempo</div>
+      <div class="tab" onclick="switchTab('pts',this)">📍 Pontos</div>
+    </div>
+    <div class="panel on" id="panel-map"><div id="map"></div></div>
+    <div class="panel" id="panel-tbl">
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 14px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;">
+        <span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Visualização actual:</span>
+        <button class="btn" style="font-size:10px;padding:4px 12px;" onclick="exportTableCSV()">↓ Guardar CSV</button>
+        <span id="tblRowCount" style="font-size:10px;color:var(--muted);margin-left:auto;"></span>
+      </div>
+      <div class="tbl-wrap" id="tblWrap">
+        <div class="empty"><div class="empty-ico">📋</div><div class="empty-ttl">Sem dados carregados</div></div>
+      </div>
+    </div>
+    <!-- POINTS PANEL -->
+    <div class="panel" id="panel-pts">
+      <div class="pts-layout">
+        <!-- LEFT: point list + add form -->
+        <div class="pts-sidebar">
+          <div class="sb-hdr" style="flex-shrink:0;">
+            Base de dados de pontos
+            <span id="ptCount" style="color:var(--accent);font-size:10px;"></span>
+          </div>
+          <!-- Add manual point -->
+          <div style="padding:10px;border-bottom:1px solid var(--border);flex-shrink:0;">
+            <div class="sb-section-lbl">Adicionar ponto manual</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <input class="inp" id="ptName" placeholder="Nome (ex: FF36, THR02)">
+              <div class="input-row">
+                <input class="inp" id="ptLat" placeholder="Lat (dec, ex: 38.8419)">
+                <input class="inp" id="ptLon" placeholder="Lon (dec, ex: -9.2173)">
+              </div>
+              <button class="btn primary" style="font-size:10px;" onclick="addManualPoint()">+ Adicionar</button>
+            </div>
+          </div>
+          <!-- Search points -->
+          <div style="padding:7px 9px;border-bottom:1px solid var(--border);flex-shrink:0;">
+            <input class="inp" id="ptSearch" placeholder="🔍 Filtrar pontos..." oninput="renderPointList()">
+          </div>
+          <div class="pts-list" id="ptList"></div>
+        </div>
+        <!-- RIGHT: query result -->
+        <div class="pts-main">
+          <div class="pts-result-hdr">
+            <span id="ptSelName" style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent);">Selecciona um ponto</span>
+            <span class="radius-lbl">Raio:</span>
+            <input class="inp inp-sm" id="ptRadius" type="number" value="1" min="0.1" max="50" step="0.1" style="width:70px;">
+            <span class="radius-lbl">NM</span>
+            <button class="btn primary" style="font-size:10px;padding:4px 12px;" onclick="queryPoint()">▶ Pesquisar</button>
+            <button class="btn" style="font-size:10px;padding:4px 12px;" onclick="exportPtResult()">↓ CSV</button>
+            <span id="ptResultCount" style="font-size:11px;color:var(--muted);margin-left:auto;"></span>
+          </div>
+          <div class="pts-result-wrap">
+            <div class="empty" id="ptEmpty">
+              <div class="empty-ico">📍</div>
+              <div class="empty-ttl">Selecciona um ponto e clica Pesquisar</div>
+              <div class="empty-sub" style="font-size:10px;color:var(--muted);">Mostra todos os voos que passaram no raio definido</div>
+            </div>
+            <table class="data-table" id="ptResultTable" style="display:none;width:100%;border-collapse:collapse;font-size:11px;">
+              <thead id="ptResultHead"></thead>
+              <tbody id="ptResultBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONSTANTS ──────────────────────────────────────────────────────────────
+const COLORS=['#00c8ff','#ff6b35','#22d3a0','#f59e0b','#a78bfa','#f43f5e','#34d399','#fb923c','#38bdf8','#e879f9','#facc15','#4ade80','#f472b6','#67e8f9','#c084fc'];
+const EXP_FIELDS=[
+  {key:'csn',    label:'Indicativo (CSN)',  fn:r=>r._csn||r.csn||''},
+  {key:'tod',    label:'Hora (TOD)',         fn:r=>r.tod||''},
+  {key:'date',   label:'Data',              fn:r=>r._date||''},
+  {key:'coords', label:'Coordenadas (modo activo)', fn:r=>coordMode==='geo'?toDMS(+r.latitude||0,'lat')+' '+toDMS(+r.longitude||0,'lon'):(+r.latitude||0).toFixed(6)+';'+(+r.longitude||0).toFixed(6)},
+  {key:'latgeo', label:'Latitude (geog.)',   fn:r=>toDMS(+r.latitude||0,'lat')},
+  {key:'longeo', label:'Longitude (geog.)',  fn:r=>toDMS(+r.longitude||0,'lon')},
+  {key:'latdec', label:'Latitude (dec.)',    fn:r=>(+r.latitude||0).toFixed(6)},
+  {key:'londec', label:'Longitude (dec.)',   fn:r=>(+r.longitude||0).toFixed(6)},
+  {key:'alt',    label:'Altitude (ft)',      fn:r=>getAlt(r)},
+  {key:'tas',    label:'TAS (kt)',           fn:r=>r.tas||r.tasa||''},
+  {key:'ias',    label:'IAS (kt)',           fn:r=>r.iar||r.iara||''},
+  {key:'roc',    label:'ROC (fpm)',          fn:r=>r.roc||''},
+  {key:'modes',  label:'Mode S',             fn:r=>r.modes||r.modeS||''},
+  {key:'modea',  label:'Mode A (squawk)',    fn:r=>r.modea||r.modeA||''},
+  {key:'trnr',   label:'Track Nr',           fn:r=>r.trknr||r.trkNr||''},
+];
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+// loadedFiles: { filename: { date:'260301', block:'00-04', rows:[] } }
+let loadedFiles = {};
+let flights = {};
+let mapLayers = {};
+let coordMode = 'dec';
+let expChecked = new Set(EXP_FIELDS.map(f=>f.key));
+let selDaysSet = new Set();
+let selBlocksSet = new Set();
+let colorMap = {}; // csn → color
+let colorIdx = 0;
+let flightTypeFilter = 'all'; // 'all' | 'arr' | 'dep' | 'lvl'
+
+// Classify a flight as ARR/DEP/LVL based on ROC
+function classifyFlight(rows){
+  if(rows.length < 2) return 'lvl';
+  // Compare first valid altitude vs last valid altitude
+  let altFirst=null, altLast=null;
+  for(let i=0;i<rows.length;i++){
+    const a=getAlt(rows[i]);
+    if(a!=='--' && a!=='-' && !isNaN(parseFloat(a))){ altFirst=parseFloat(a); break; }
+  }
+  for(let i=rows.length-1;i>=0;i--){
+    const a=getAlt(rows[i]);
+    if(a!=='--' && a!=='-' && !isNaN(parseFloat(a))){ altLast=parseFloat(a); break; }
+  }
+  if(altFirst===null||altLast===null) return 'lvl';
+  const diff = altLast - altFirst;
+  if(diff < -200) return 'arr';  // lost >200ft = arrival
+  if(diff >  200) return 'dep';  // gained >200ft = departure
+  return 'lvl';
+}
+
+// Returns true if flight should be shown (visible toggle + type filter)
+function isFlightVisible(csn, f){
+  if(!f.visible) return false;
+  if(flightTypeFilter==='all') return true;
+  return classifyFlight(f.rows) === flightTypeFilter;
+}
+
+// ── MAP ────────────────────────────────────────────────────────────────────
+const map = L.map('map',{zoomControl:true}).setView([39.5,-8.5],7);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+  attribution:'© OpenStreetMap © CARTO',subdomains:'abcd',maxZoom:19
+}).addTo(map);
+
+// ── HELPERS ────────────────────────────────────────────────────────────────
+function toDMS(deg,type){
+  const a=Math.abs(deg),d=Math.floor(a),mf=(a-d)*60,m=Math.floor(mf),s=((mf-m)*60).toFixed(2);
+  const dir=type==='lat'?(deg>=0?'N':'S'):(deg>=0?'E':'W');
+  return `${String(d).padStart(2,'0')}°${String(m).padStart(2,'0')}'${String(s).padStart(5,'0')}"${dir}`;
+}
+function gv(r,...ks){for(const k of ks){if(r[k]!==undefined&&r[k]!=='')return r[k];}return '—';}
+function getAlt(r){
+  const raw=r.modec!==undefined&&r.modec!==''?r.modec:r.baroh!==undefined&&r.baroh!==''?r.baroh:null;
+  if(raw===null)return '—';
+  const v=parseFloat(raw);
+  if(isNaN(v))return '—';
+  return Math.round(v<600?v*100:v);
+}
+function trRange(rows){
+  return rows.length?`${String(rows[0].tod||'').substring(0,8)} → ${String(rows[rows.length-1].tod||'').substring(0,8)}`:'';
+}
+// Parse filename: EVL_lisTO_260301_00-04 → {date:'260301', block:'00-04'}
+function parseFilename(name){
+  const m=name.match(/(\d{6})_(\d{2}-\d{2})/);
+  if(m) return {date:m[1], block:m[2]};
+  // fallback: just use filename
+  return {date:'??', block:name.replace(/\.[^.]+$/,'')};
+}
+function fmtDate(d){
+  // d = 'AAMMDD' → 'DD/MM/20AA'
+  if(d.length===6) return `${d.slice(4,6)}/${d.slice(2,4)}/20${d.slice(0,2)}`;
+  return d;
+}
+function getColor(csn){
+  if(!colorMap[csn]){ colorMap[csn]=COLORS[colorIdx++%COLORS.length]; }
+  return colorMap[csn];
+}
+
+// ── FILE LOADING ───────────────────────────────────────────────────────────
+function openNewFiles(){ document.getElementById('fileIn2').click(); }
+
+function clearAll(){
+  loadedFiles={}; flights={}; colorMap={}; colorIdx=0;
+  selDaysSet=new Set(); selBlocksSet=new Set();
+  Object.values(mapLayers).forEach(lg=>lg&&map.removeLayer(lg));
+  mapLayers={};
+  renderDayPicker(); renderSidebar(); renderTable(); updateStats();
+  document.getElementById('statsBar').style.display='none';
+  document.getElementById('sDot').classList.remove('on');
+  document.getElementById('sTxt').textContent='Sem dados';
+}
+
+// ── FILE LOADING — batch processing to avoid browser crash ────────────────
+const BATCH_SIZE = 5; // process N files at a time
+
+async function loadFiles(files){
+  const pw=document.getElementById('progressWrap');
+  const pb=document.getElementById('progressBar');
+  const pt=document.getElementById('progressTxt');
+
+  try {
+    // Filter only CSV/Excel files, ignore system/hidden files
+    const arr = Array.from(files).filter(f => {
+      const n = f.name.toLowerCase();
+      return (n.endsWith('.csv') || n.endsWith('.xlsx') || n.endsWith('.xls'))
+             && !f.name.startsWith('.') && !f.name.startsWith('~');
+    });
+    if(!arr.length){ alert('Nenhum ficheiro CSV/Excel encontrado.'); return; }
+
+    pw.style.display=''; pt.style.display='';
+    pb.style.width='0%';
+
+    let done=0, errors=0;
+    for(let i=0; i<arr.length; i+=BATCH_SIZE){
+      const batch = arr.slice(i, i+BATCH_SIZE);
+      pt.textContent = `A processar ${Math.min(i+BATCH_SIZE, arr.length)} / ${arr.length} ficheiros...`;
+      pb.style.width = `${Math.round(i/arr.length*100)}%`;
+      const results = await Promise.allSettled(batch.map(f=>readFile(f)));
+      results.forEach(r=>{ if(r.status==='rejected'){ errors++; console.warn('Erro ficheiro:', r.reason); } });
+      done += batch.length;
+      await new Promise(r=>setTimeout(r,10)); // yield to browser
+    }
+
+    pb.style.width='100%';
+    const loaded = Object.keys(loadedFiles).length;
+    pt.textContent = errors > 0
+      ? `${loaded} ficheiro(s) carregado(s) — ${errors} ignorado(s)`
+      : `${loaded} ficheiro(s) carregado(s)!`;
+
+    setTimeout(()=>{ pw.style.display='none'; pt.style.display='none'; }, 1500);
+    document.getElementById('uploadOv').style.display='none';
+
+    selDaysSet   = new Set(Object.values(loadedFiles).map(f=>f.date));
+    selBlocksSet = new Set(Object.values(loadedFiles).map(f=>f.block));
+    renderDayPicker();
+
+    if(loaded <= 10){
+      applyFilter();
+    } else {
+      renderSidebar(); updateStats();
+      document.getElementById('statsBar').style.display='';
+      document.getElementById('sTxt').textContent =
+        `${loaded} ficheiro(s) prontos — selecciona dias/blocos e clica Aplicar`;
+    }
+    document.getElementById('sDot').classList.add('on');
+
+  } catch(fatalErr) {
+    console.error('Erro fatal no upload:', fatalErr);
+    pw.style.display='none'; pt.style.display='none';
+    alert('Erro ao carregar ficheiros: ' + fatalErr.message + '\nVerifica a consola (F12) para mais detalhes.');
+  }
+}
+
+function parseCSVText(text){
+  // Fast CSV parser — handles semicolon and comma separators
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  if(lines.length < 2) return [];
+  // Auto-detect separator
+  const sep = lines[0].includes(';') ? ';' : ',';
+  const headers = lines[0].split(sep).map(h=>h.trim().replace(/^"|"$/g,'').toLowerCase());
+  const rows = [];
+  for(let i=1;i<lines.length;i++){
+    const line=lines[i].trim();
+    if(!line) continue;
+    const vals=line.split(sep);
+    const obj={};
+    headers.forEach((h,j)=>{ obj[h]=(vals[j]||'').trim().replace(/^"|"$/g,''); });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function readFile(file){
+  return new Promise((resolve,reject)=>{
+    const pathForParsing = file.webkitRelativePath || file.name;
+    const {date,block} = parseFilename(pathForParsing);
+    const fileKey = file.webkitRelativePath || file.name;
+    const isCSV = file.name.toLowerCase().endsWith('.csv');
+    const rd = new FileReader();
+
+    const processRows = (raw) => {
+      // Only keep rows that have lat/lon data to save memory
+      const norm = raw
+        .filter(r => r.latitude !== undefined || r.lat !== undefined)
+        .map(r => {
+          const o = {};
+          Object.keys(r).forEach(k => o[k.toLowerCase().trim()] = r[k]);
+          o._date=date; o._block=block; o._filename=file.name;
+          return o;
+        });
+      loadedFiles[fileKey] = {date, block, rows:norm, filename:file.name};
+      resolve();
+    };
+
+    rd.onerror = () => reject(new Error('Erro a ler ' + file.name));
+
+    if(isCSV){
+      rd.onload = e => {
+        try{
+          // Strip BOM if present
+          let text = e.target.result;
+          if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+          const rows = parseCSVText(text);
+          if(!rows.length){ console.warn('Ficheiro vazio ou sem colunas reconhecidas:', file.name); resolve(); return; }
+          processRows(rows);
+        }
+        catch(err){ console.error(file.name, err); resolve(); }
+      };
+      rd.readAsText(file, 'UTF-8');
+    } else {
+      // Excel via XLSX
+      rd.onload = e => {
+        try{
+          const wb = XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+          const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+          processRows(raw);
+        }catch(err){ console.error(file.name, err); resolve(); }
+      };
+      rd.readAsArrayBuffer(file);
+    }
+  });
+}
+
+// file inputs — individual files
+document.getElementById('fileIn').addEventListener('change',e=>{loadFiles(e.target.files);e.target.value='';});
+// directory inputs (webkitdirectory reads all files recursively incl. subdirs)
+document.getElementById('fileInDir').addEventListener('change',e=>{loadFiles(e.target.files);e.target.value='';});
+document.getElementById('fileInRoot').addEventListener('change',e=>{loadFiles(e.target.files);e.target.value='';});
+// header add buttons
+document.getElementById('addDir').addEventListener('change',e=>{loadFiles(e.target.files);e.target.value='';});
+document.getElementById('addFiles').addEventListener('change',e=>{loadFiles(e.target.files);e.target.value='';});
+// drag & drop (also supports folder drop in Chrome)
+const dz=document.getElementById('dropZone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',async e=>{
+  e.preventDefault();dz.classList.remove('drag');
+  // Try DataTransferItemList for directory support (Chrome)
+  const items=[...e.dataTransfer.items||[]];
+  const fileList=[];
+  async function traverseEntry(entry){
+    if(entry.isFile){
+      await new Promise(r=>entry.file(f=>{fileList.push(f);r();}));
+    } else if(entry.isDirectory){
+      const reader=entry.createReader();
+      await new Promise(r=>reader.readEntries(async entries=>{
+        for(const en of entries) await traverseEntry(en);
+        r();
+      }));
+    }
+  }
+  for(const item of items){
+    const entry=item.webkitGetAsEntry&&item.webkitGetAsEntry();
+    if(entry) await traverseEntry(entry);
+    else if(item.getAsFile) fileList.push(item.getAsFile());
+  }
+  if(fileList.length) loadFiles(fileList);
+  else loadFiles(e.dataTransfer.files);
+});
+
+// ── DAY PICKER ─────────────────────────────────────────────────────────────
+const ALL_BLOCKS=['00-04','04-08','08-12','12-16','16-20','20-24'];
+
+function renderDayPicker(){
+  const files=Object.values(loadedFiles);
+  const days=[...new Set(files.map(f=>f.date))].sort();
+  const blocksAvail=new Set(files.map(f=>f.block));
+
+  const dg=document.getElementById('dayGrid');
+  dg.innerHTML='';
+  if(!days.length){dg.innerHTML='<span style="font-size:10px;color:var(--muted);">—</span>';return;}
+  days.forEach(d=>{
+    const b=document.createElement('button');
+    b.className='day-btn'+(selDaysSet.has(d)?' sel':'');
+    b.textContent=fmtDate(d);
+    b.dataset.day=d;
+    b.onclick=()=>{
+      selDaysSet.has(d)?selDaysSet.delete(d):selDaysSet.add(d);
+      b.classList.toggle('sel');
+    };
+    dg.appendChild(b);
+  });
+
+  const bg=document.getElementById('blockGrid');
+  bg.innerHTML='';
+  ALL_BLOCKS.forEach(bl=>{
+    const b=document.createElement('button');
+    b.className='block-btn'+(selBlocksSet.has(bl)?' sel':'')+(blocksAvail.has(bl)?'':' nodata');
+    b.textContent=bl;
+    b.dataset.block=bl;
+    if(blocksAvail.has(bl)){
+      b.onclick=()=>{
+        selBlocksSet.has(bl)?selBlocksSet.delete(bl):selBlocksSet.add(bl);
+        b.classList.toggle('sel');
+      };
+    }
+    bg.appendChild(b);
+  });
+}
+
+function selDays(v){
+  const days=[...new Set(Object.values(loadedFiles).map(f=>f.date))];
+  selDaysSet=v?new Set(days):new Set();
+  document.querySelectorAll('.day-btn').forEach(b=>b.classList.toggle('sel',v));
+}
+function selBlocks(v){
+  const avail=new Set(Object.values(loadedFiles).map(f=>f.block));
+  selBlocksSet=v?new Set(avail):new Set();
+  document.querySelectorAll('.block-btn:not(.nodata)').forEach(b=>b.classList.toggle('sel',v));
+}
+
+function applyFilter(){
+  // Get optional CSN search term — acts as prefix/contains filter on flight callsign
+  const csnFilter = (document.getElementById('fSearch').value||'').trim().toLowerCase();
+
+  flights={};
+  const files=Object.values(loadedFiles);
+  const filtered=files.filter(f=>selDaysSet.has(f.date)&&selBlocksSet.has(f.block));
+
+  filtered.forEach(f=>{
+    f.rows.forEach(row=>{
+      const csn=String(row.csn||row.callsign||'UNKNOWN').trim();
+      // Apply CSN filter: if user typed something, only include matching flights
+      if(csnFilter && !csn.toLowerCase().includes(csnFilter)) return;
+      if(!flights[csn]) flights[csn]={color:getColor(csn),rows:[],visible:true};
+      flights[csn].rows.push(row);
+    });
+  });
+  Object.values(flights).forEach(f=>f.rows.sort((a,b)=>String(a.tod||'').localeCompare(String(b.tod||''))));
+
+  const nFiles=filtered.length;
+  const nFlights=Object.keys(flights).length;
+  const filterMsg = csnFilter ? ` · filtro: "${csnFilter.toUpperCase()}"` : '';
+  document.getElementById('sTxt').textContent=`${nFiles} ficheiro(s) · ${nFlights} voo(s)${filterMsg}`;
+  document.getElementById('statsBar').style.display='';
+  // Don't clear fSearch — keep it visible so user knows filter is active
+
+  renderSidebar(); renderMap(); renderTable(); updateStats();
+}
+
+// ── SIDEBAR ────────────────────────────────────────────────────────────────
+function renderSidebar(){
+  const list=document.getElementById('fList');
+  const q=(document.getElementById('fSearch').value||'').toLowerCase();
+  document.getElementById('fCount').textContent=`(${Object.keys(flights).length})`;
+  list.innerHTML='';
+  if(!Object.keys(flights).length){
+    list.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted);font-size:11px;">Aplica um filtro para ver os voos</div>';
+    return;
+  }
+  Object.entries(flights).forEach(([csn,f])=>{
+    if(q&&!csn.toLowerCase().includes(q))return;
+    // Apply ARR/DEP/LVL filter
+    if(flightTypeFilter!=='all'){
+      const cls=classifyFlight(f.rows);
+      if(cls!==flightTypeFilter)return;
+    }
+    const d=document.createElement('div');
+    d.className='fi'+(f.visible?' on':'');
+    d.dataset.csn=csn;
+    const cls=classifyFlight(f.rows);
+    const clsBadge=cls==='arr'?'<span style="color:#f87171;font-size:9px;margin-left:4px;">▼ARR</span>':cls==='dep'?'<span style="color:#22d3a0;font-size:9px;margin-left:4px;">▲DEP</span>':'<span style="color:#64748b;font-size:9px;margin-left:4px;">—NVL</span>';
+    d.innerHTML=`<div class="fi-dot" style="background:${f.color}"></div><div class="fi-info"><div class="fi-csn">${csn}${clsBadge}</div><div class="fi-meta">${f.rows.length} pts · ${trRange(f.rows)}</div></div><div class="fi-chk">${f.visible?'✓':''}</div>`;
+    d.addEventListener('click',()=>toggleFlight(csn));
+    list.appendChild(d);
+  });
+}
+function filterFlights(){renderSidebar();}
+
+function setFlightTypeFilter(type){
+  flightTypeFilter = type;
+  ['All','Arr','Dep','Lvl'].forEach(t=>{
+    const btn = document.getElementById('fBtn'+t);
+    if(btn) btn.classList.toggle('toggled', t.toLowerCase()===type);
+  });
+  renderSidebar(); renderMap(); renderTable(); updateStats();
+}
+function toggleFlight(csn){flights[csn].visible=!flights[csn].visible;renderSidebar();renderMap();renderTable();updateStats();}
+function selAll(v){Object.keys(flights).forEach(k=>flights[k].visible=v);renderSidebar();renderMap();renderTable();updateStats();}
+
+// Returns true if flight should be shown (visible toggle + type filter)
+function isFlightVisible(csn, f){
+  if(!f.visible) return false;
+  if(flightTypeFilter==='all') return true;
+  return classifyFlight(f.rows) === flightTypeFilter;
+}
+
+// ── MAP ────────────────────────────────────────────────────────────────────
+function renderMap(){
+  Object.values(mapLayers).forEach(lg=>lg&&map.removeLayer(lg));
+  mapLayers={};
+  const bounds=[];
+  Object.entries(flights).forEach(([csn,f])=>{
+    if(!isFlightVisible(csn,f))return;
+    const valid=f.rows.filter(r=>r.latitude&&r.longitude&&!isNaN(+r.latitude)&&!isNaN(+r.longitude));
+    if(!valid.length)return;
+    const lls=valid.map(r=>[+r.latitude,+r.longitude]);
+    lls.forEach(ll=>bounds.push(ll));
+    const lg=L.layerGroup();
+    L.polyline(lls,{color:f.color,weight:2.5,opacity:.85}).addTo(lg);
+    L.circleMarker(lls[0],{radius:7,fillColor:f.color,color:'#fff',weight:2,fillOpacity:1}).bindTooltip(`${csn} — Início`,{direction:'top'}).addTo(lg);
+    L.circleMarker(lls[lls.length-1],{radius:7,fillColor:'#fff',color:f.color,weight:2,fillOpacity:.9}).bindTooltip(`${csn} — Fim`,{direction:'top'}).addTo(lg);
+    valid.forEach((r,i)=>{
+      if(i===0||i===valid.length-1)return;
+      const ll=[+r.latitude,+r.longitude];
+      const alt=getAlt(r);
+      const tas=gv(r,'tas','tasa');
+      const ias=gv(r,'iar','iara');
+      const roc=gv(r,'roc');
+      const tod=String(r.tod||'').substring(0,12);
+      const rc=parseFloat(roc);
+      const rcol=rc>0?'#22d3a0':rc<0?'#f87171':'#94a3b8';
+      const mk=L.circleMarker(ll,{radius:4,fillColor:f.color,color:'transparent',fillOpacity:.7,weight:0});
+      mk.bindPopup(L.popup({closeButton:false,offset:[0,-4],autoPan:false}).setContent(
+        `<div class="pu"><div class="pu-csn" style="color:${f.color}">${csn}</div>
+        <div class="pu-row"><span class="pu-lbl">Hora</span><span class="pu-val">${tod}</span></div>
+        <div class="pu-row"><span class="pu-lbl">Altitude</span><span class="pu-val" style="color:#60a5fa">${alt} ft</span></div>
+        <div class="pu-row"><span class="pu-lbl">TAS</span><span class="pu-val" style="color:#22d3a0">${tas} kt</span></div>
+        <div class="pu-row"><span class="pu-lbl">IAS</span><span class="pu-val" style="color:#a78bfa">${ias} kt</span></div>
+        <div class="pu-row"><span class="pu-lbl">ROC</span><span class="pu-val" style="color:${rcol}">${roc} fpm</span></div>
+        <div class="pu-row"><span class="pu-lbl">Lat/Lon</span><span class="pu-val" style="font-size:10px">${(+r.latitude).toFixed(5)}, ${(+r.longitude).toFixed(5)}</span></div>
+        </div>`));
+      mk.on('mouseover',function(){this.openPopup();this.setStyle({radius:6,fillOpacity:1});});
+      mk.on('mouseout',function(){this.closePopup();this.setStyle({radius:4,fillOpacity:.7});});
+      mk.addTo(lg);
+    });
+    lg.addTo(map);mapLayers[csn]=lg;
+  });
+  if(bounds.length>1)map.fitBounds(bounds,{padding:[40,40]});
+}
+
+// ── TABLE ──────────────────────────────────────────────────────────────────
+function exportTableCSV(){
+  const vis = Object.entries(flights).filter(([csn,f])=>isFlightVisible(csn,f));
+  if(!vis.length){ alert('Sem dados visíveis para exportar.'); return; }
+
+  let rows = [];
+  vis.forEach(([csn,f])=>f.rows.forEach(r=>rows.push({...r,_csn:csn,_color:f.color})));
+  rows.sort((a,b)=>String(a.tod||'').localeCompare(String(b.tod||'')));
+
+  const geo = coordMode==='geo';
+  const latHdr = geo ? 'Latitude (geo)' : 'Latitude (dec)';
+  const lonHdr = geo ? 'Longitude (geo)' : 'Longitude (dec)';
+
+  const hdr = ['Hora (TOD)','Data','Bloco','Voo','Altitude (ft)','TAS (kt)','IAS (kt)','ROC (fpm)',latHdr,lonHdr].join(';');
+  const lines = rows.map(r=>{
+    const alt  = getAlt(r);
+    const tas  = gv(r,'tas');
+    const ias  = gv(r,'iar','iara');
+    const roc  = gv(r,'roc');
+    const tod  = String(r.tod||'').substring(0,12);
+    const date = r._date ? fmtDate(String(r._date)) : '';
+    const blk  = r._block||'';
+    const latV = geo ? toDMS(+r.latitude||0,'lat') : (+r.latitude||0).toFixed(6);
+    const lonV = geo ? toDMS(+r.longitude||0,'lon') : (+r.longitude||0).toFixed(6);
+    return [tod,date,blk,r._csn,alt,tas,ias,roc,latV,lonV].join(';');
+  });
+
+  const csv = [hdr,...lines].join('\r\n')
+  const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  // filename includes active filters
+  const q = (document.getElementById('fSearch').value||'').trim().toUpperCase();
+  const suffix = q ? `_${q}` : '';
+  a.download = `dados_tempo${suffix}_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function toggleCoords(){
+  coordMode=coordMode==='dec'?'geo':'dec';
+  const label = coordMode==='dec'?'📐 Decimais':'🌐 Geográficas';
+  document.getElementById('coordBtn').textContent=label;
+  renderTable();
+  // Re-render points result if there are results (using stored params)
+  if(ptQueryResults.length && window._lastPtRenderPt){
+    renderPtResults(window._lastPtRenderPt, window._lastPtRenderRadius||1);
+  }
+}
+
+// ── THEME TOGGLE ──────────────────────────────────────────────────────────────
+function toggleTheme(){
+  const isLight = document.documentElement.classList.toggle('light');
+  // isLight=true means we're NOW in light mode → button should offer to go dark
+  document.getElementById('themeBtn').textContent = isLight ? '☀️ Claro' : '🌙 Escuro';
+  map.invalidateSize();
+}
+function renderTable(){
+  const wrap=document.getElementById('tblWrap');
+  const vis=Object.entries(flights).filter(([csn,f])=>isFlightVisible(csn,f));
+  if(!vis.length){wrap.innerHTML='<div class="empty"><div class="empty-ico">📋</div><div class="empty-ttl">Nenhum voo seleccionado</div></div>';return;}
+  let rows=[];
+  vis.forEach(([csn,f])=>f.rows.forEach(r=>rows.push({...r,_csn:csn,_color:f.color})));
+  rows.sort((a,b)=>String(a.tod||'').localeCompare(String(b.tod||'')));
+  const cnt = document.getElementById('tblRowCount');
+  if(cnt) cnt.textContent = `${rows.length.toLocaleString()} linha(s)`;
+  const geo=coordMode==='geo';
+  wrap.innerHTML=`<table><thead><tr>
+    <th>Hora (TOD)</th><th>Data</th><th>Voo</th><th>Altitude (ft)</th>
+    <th>TAS (kt)</th><th>IAS (kt)</th><th>ROC (fpm)</th>
+    <th>${geo?'Latitude (geo)':'Latitude'}</th><th>${geo?'Longitude (geo)':'Longitude'}</th>
+  </tr></thead><tbody>${rows.map(r=>{
+    const alt=getAlt(r);
+    const tas=gv(r,'tas');const ias=gv(r,'iar','iara');const roc=gv(r,'roc');
+    const rn=parseFloat(roc);const rcls=rn>0?'color:#22d3a0':rn<0?'color:#f87171':'';
+    const tod=String(r.tod||'').substring(0,12);
+    const dateStr=r._date?fmtDate(String(r._date)):'';
+    const latV=geo?toDMS(+r.latitude||0,'lat'):(+r.latitude||0).toFixed(5);
+    const lonV=geo?toDMS(+r.longitude||0,'lon'):(+r.longitude||0).toFixed(5);
+    return `<tr>
+      <td>${tod}</td>
+      <td style="color:var(--muted);font-size:10px">${dateStr}</td>
+      <td><span class="badge" style="background:${r._color}22;color:${r._color}">● ${r._csn}</span></td>
+      <td style="color:#60a5fa">${alt}</td>
+      <td style="color:#22d3a0">${tas}</td>
+      <td style="color:#a78bfa">${ias}</td>
+      <td style="${rcls}">${roc}</td>
+      <td style="color:var(--muted);font-size:10px">${latV}</td>
+      <td style="color:var(--muted);font-size:10px">${lonV}</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+// ── STATS ──────────────────────────────────────────────────────────────────
+function updateStats(){
+  const vis=Object.entries(flights).filter(([csn,f])=>isFlightVisible(csn,f));
+  let pts=0,mA=0,mS=0,f1='',lx='';
+  vis.forEach(([,f])=>{
+    pts+=f.rows.length;
+    f.rows.forEach(r=>{
+      const av=getAlt(r);const a=av==='—'?0:parseFloat(av);
+      const s=parseFloat(r.tas||0);
+      if(a>mA)mA=a;if(s>mS)mS=s;
+      const t=String(r.tod||'');
+      if(!f1||t<f1)f1=t;if(!lx||t>lx)lx=t;
+    });
+  });
+  const nf=Object.values(loadedFiles).filter(f=>selDaysSet.has(f.date)&&selBlocksSet.has(f.block)).length;
+  document.getElementById('stFiles').textContent=nf;
+  document.getElementById('stF').textContent=vis.length;
+  document.getElementById('stP').textContent=pts.toLocaleString();
+  document.getElementById('stA').textContent=mA?Math.round(mA).toLocaleString():'—';
+  document.getElementById('stV').textContent=mS?Math.round(mS):'—';
+  document.getElementById('stD').textContent=f1?`${f1.substring(0,8)} – ${lx.substring(0,8)}`:'—';
+}
+
+// ── TABS ───────────────────────────────────────────────────────────────────
+function switchTab(id,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('panel-'+id).classList.add('on');
+  if(id==='map')setTimeout(()=>map.invalidateSize(),50);
+}
+
+// ── MODAL ──────────────────────────────────────────────────────────────────
+function closeModal(){document.getElementById('exportModal').style.display='none';}
+document.getElementById('exportModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+
+// ── EXPORT ─────────────────────────────────────────────────────────────────
+function openExportModal(){
+  if(!Object.keys(flights).length){alert('Sem dados para exportar.');return;}
+  const c=document.getElementById('expFields');
+  c.innerHTML='';
+  EXP_FIELDS.forEach(f=>{
+    const on=expChecked.has(f.key);
+    const d=document.createElement('div');
+    d.className='exp-f'+(on?' on':'');
+    d.dataset.key=f.key;
+    d.innerHTML=`<span>${on?'✓':'○'}</span>${f.label}`;
+    d.addEventListener('click',()=>{
+      expChecked.has(f.key)?expChecked.delete(f.key):expChecked.add(f.key);
+      d.classList.toggle('on');
+      d.querySelector('span').textContent=expChecked.has(f.key)?'✓':'○';
+      updExpCount();
+    });
+    c.appendChild(d);
+  });
+  updExpCount();
+  document.getElementById('exportModal').style.display='flex';
+}
+function updExpCount(){document.getElementById('expCount').textContent=`${expChecked.size} campo(s) seleccionado(s)`;}
+function expSelAll(v){
+  expChecked=v?new Set(EXP_FIELDS.map(f=>f.key)):new Set();
+  document.querySelectorAll('.exp-f').forEach(d=>{d.classList.toggle('on',v);d.querySelector('span').textContent=v?'✓':'○';});
+  updExpCount();
+}
+function doExport(){
+  if(!expChecked.size){alert('Selecciona pelo menos um campo.');return;}
+  const fields=EXP_FIELDS.filter(f=>expChecked.has(f.key));
+  let rows=[];
+  Object.entries(flights).filter(([,f])=>f.visible).forEach(([csn,f])=>f.rows.forEach(r=>rows.push({...r,_csn:csn})));
+  rows.sort((a,b)=>String(a.tod||'').localeCompare(String(b.tod||'')));
+  const hdr=fields.map(f=>f.label).join(';');
+  const lines=rows.map(r=>fields.map(f=>{const v=String(f.fn(r));return v.includes(';')?`"${v}"`:v;}).join(';'));
+  const csv=[hdr,...lines].join('\r\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`flight_tracks_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);closeModal();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── POINTS DATABASE ────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Pre-loaded AIP waypoints for LPPT area (ENR + AD)
+const AIP_POINTS = [
+  {name:'ESUTI', lat:37.859908, lon:-10.430214, type:'aip', desc:'IAF LPPT'},
+  {name:'UNPOT', lat:38.179342, lon:-10.000000, type:'aip', desc:'Waypoint ARR LPPT'},
+  {name:'CASLU', lat:38.540014, lon:-9.809978, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'NATID', lat:38.881672, lon:-9.547750, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'MAZUK', lat:38.593839, lon:-9.554028, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'ERNIL', lat:38.498111, lon:-9.529731, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'RELKU', lat:38.416922, lon:-9.460778, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'ZEFFI', lat:38.362583, lon:-9.357719, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'NEVUD', lat:38.567692, lon:-9.313608, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'ODLIX', lat:38.678922, lon:-9.317083, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'EKLID', lat:39.142372, lon:-9.263636, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'ROTBU', lat:39.196375, lon:-9.159175, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'LERLI', lat:39.215033, lon:-9.036011, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'FADEF', lat:39.195472, lon:-8.913075, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'COCUN', lat:39.026533, lon:-9.068600, type:'aip', desc:'Waypoint STAR LPPT'},
+  {name:'UPKAT', lat:38.966400, lon:-9.036681, type:'aip', desc:'CIF/Holding LPPT'},
+  {name:'PESEX', lat:38.592339, lon:-9.236858, type:'aip', desc:'FAF RWY 03/21 LPPT'},
+  {name:'YETSI', lat:38.321531, lon:-8.895339, type:'aip', desc:'Waypoint STAR RWY21 LPPT'},
+  {name:'ORTUG', lat:38.403972, lon:-8.996081, type:'aip', desc:'Waypoint STAR RWY21 LPPT'},
+  {name:'ZACRA', lat:38.346553, lon:-9.106456, type:'aip', desc:'Waypoint STAR RWY21 LPPT'},
+  {name:'INLIB', lat:38.326622, lon:-9.236239, type:'aip', desc:'Waypoint STAR RWY21 LPPT'},
+  {name:'MIGFO', lat:38.347183, lon:-9.365861, type:'aip', desc:'Waypoint STAR RWY21 LPPT'},
+  {name:'ULTIT', lat:38.532278, lon:-9.204903, type:'aip', desc:'Waypoint STAR RWY21 LPPT'},
+  {name:'INBOM', lat:40.001919, lon:-8.302003, type:'aip', desc:'IAF/DEP LPPT'},
+  {name:'LAZET', lat:38.923944, lon:-10.671011, type:'aip', desc:'Holding LPPT'},
+  {name:'LUVUP', lat:37.720342, lon:-10.168589, type:'aip', desc:'IAF LPPT'},
+  {name:'UPULO', lat:39.043769, lon:-7.651956, type:'aip', desc:'Holding LPPT'},
+  {name:'VATZI', lat:37.597808, lon:-8.863081, type:'aip', desc:'Holding LPPT'},
+  {name:'XAMAX', lat:40.031100, lon:-8.536206, type:'aip', desc:'Holding LPPT'},
+  {name:'RULOX', lat:38.900000, lon:-10.000000, type:'aip', desc:'Waypoint ARR LPPT'},
+  {name:'ESPICHEL', lat:38.424167, lon:-9.185556, type:'aip', desc:'DVOR/DME ESP'},
+  {name:'LISBOA', lat:38.887778, lon:-9.162778, type:'aip', desc:'DVOR/DME LIS'},
+  {name:'FATIMA', lat:39.665556, lon:-8.492778, type:'aip', desc:'DVOR/DME FTM'},
+  {name:'PORTO', lat:41.273056, lon:-8.687778, type:'aip', desc:'DVOR/DME PRT'},
+  {name:'FARO', lat:37.013611, lon:-7.975000, type:'aip', desc:'DVOR/DME VFA'},
+  {name:'NISA', lat:39.564722, lon:-7.914722, type:'aip', desc:'DVOR/DME NSA'},
+  {name:'VISEU', lat:40.723333, lon:-7.885833, type:'aip', desc:'DVOR/DME VIS'},
+  {name:'THR03', lat:38.774300, lon:-9.133900, type:'aip', desc:'Threshold RWY 03 LPPT'},
+  {name:'THR21', lat:38.745600, lon:-9.134200, type:'aip', desc:'Threshold RWY 21 LPPT'},
+  {name:'NAKOS', lat:38.000000, lon:-9.334444, type:'aip', desc:'Waypoint ENR'},
+  {name:'GANSU', lat:38.000000, lon:-9.817500, type:'aip', desc:'Waypoint ENR'},
+  {name:'LIGRA', lat:38.000000, lon:-9.590833, type:'aip', desc:'Waypoint ENR'},
+  {name:'MAGUM', lat:39.167500, lon:-8.392500, type:'aip', desc:'Waypoint ENR'},
+  {name:'SOTEX', lat:38.292778, lon:-8.220000, type:'aip', desc:'Waypoint ENR'},
+  {name:'BUSEN', lat:38.545000, lon:-10.000000, type:'aip', desc:'Waypoint ENR'},
+  {name:'ATECA', lat:38.658333, lon:-8.622500, type:'aip', desc:'Waypoint ENR'},
+  {name:'TAGUX', lat:38.945556, lon:-7.914167, type:'aip', desc:'Waypoint ENR'},
+  {name:'TROIA', lat:38.073333, lon:-8.879167, type:'aip', desc:'Waypoint ENR'},
+  {name:'ODEMI', lat:37.497500, lon:-8.383889, type:'aip', desc:'Waypoint ENR'},
+  {name:'ALAGU', lat:38.088611, lon:-7.614444, type:'aip', desc:'Waypoint ENR'},
+  {name:'ODPAK', lat:38.128333, lon:-7.926667, type:'aip', desc:'Waypoint ENR'},
+  {name:'DIGAL', lat:39.740833, lon:-7.989722, type:'aip', desc:'Waypoint ENR'},
+  {name:'ABETO', lat:40.429722, lon:-8.056389, type:'aip', desc:'Waypoint ENR'},
+  {name:'ELVAR', lat:39.219444, lon:-7.223333, type:'aip', desc:'Waypoint ENR'},
+  {name:'EXONA', lat:38.904414, lon:-8.016667, type:'aip', desc:'Waypoint DEP LPPT'},
+  {name:'MOMAS', lat:39.319167, lon:-8.016667, type:'aip', desc:'Waypoint ENR'},
+  {name:'PT805', lat:38.547325, lon:-8.564742, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT808', lat:39.686619, lon:-8.350303, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT811', lat:38.931233, lon:-8.269744, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT813', lat:39.106664, lon:-8.231472, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT816', lat:39.316008, lon:-9.440897, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT818', lat:39.142406, lon:-9.439811, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT822', lat:39.583492, lon:-8.524942, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT824', lat:39.314414, lon:-8.735831, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT826', lat:39.000992, lon:-9.093119, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT828', lat:38.723706, lon:-9.241256, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT830', lat:39.315744, lon:-9.088361, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT832', lat:39.399250, lon:-9.118786, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT833', lat:38.178781, lon:-9.102592, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT840', lat:38.361992, lon:-9.114475, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT841', lat:38.491725, lon:-9.549339, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT842', lat:38.343303, lon:-9.236172, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT843', lat:38.405133, lon:-9.475778, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT850', lat:39.059106, lon:-8.740447, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT851', lat:39.211806, lon:-9.167314, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT852', lat:39.140692, lon:-8.809264, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT853', lat:39.231714, lon:-9.035911, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT814', lat:39.399447, lon:-9.441422, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'ARNIT', lat:38.990722, lon:-8.959336, type:'aip', desc:'Waypoint ARR LPPT'},
+  {name:'DEKKI', lat:38.963058, lon:-8.695667, type:'aip', desc:'Waypoint ARR LPPT'},
+  {name:'ESEBI', lat:39.403189, lon:-8.666467, type:'aip', desc:'Waypoint ARR LPPT'},
+  {name:'EVPAP', lat:39.152403, lon:-8.794006, type:'aip', desc:'Waypoint ARR LPPT'},
+  {name:'FUSSI', lat:39.210842, lon:-8.904750, type:'aip', desc:'Waypoint ARR LPPT'},
+  {name:'ITVIT', lat:38.961519, lon:-8.562219, type:'aip', desc:'Waypoint ARR LPPT'},
+  {name:'LUXUT', lat:37.999797, lon:-9.026939, type:'aip', desc:'Waypoint ARR LPPT'},
+  {name:'ROMEP', lat:39.065364, lon:-8.720614, type:'aip', desc:'Waypoint ARR LPPT'},
+  {name:'PT810', lat:39.758353, lon:-8.513492, type:'aip', desc:'PT waypoint ARR LPPT'},
+  {name:'PT812', lat:39.398158, lon:-8.796156, type:'aip', desc:'PT waypoint ARR LPPT'},
+];
+
+// User-defined points (persisted in sessionStorage)
+let userPoints = [];
+try { userPoints = JSON.parse(sessionStorage.getItem('userPoints')||'[]'); } catch(e){}
+
+let selectedPoint = null;
+let ptQueryResults = [];
+
+function allPoints(){ return [...AIP_POINTS, ...userPoints]; }
+
+// ── RENDER POINT LIST ──────────────────────────────────────────────────────
+function renderPointList(){
+  const q = (document.getElementById('ptSearch').value||'').toLowerCase();
+  // Filter by proximity to LPPT (38.7756N, 9.1359W) — max 40NM
+  const LPPT = {lat:38.7756, lon:-9.1359};
+  const pts = allPoints().filter(p => {
+    const d = distNM(p.lat, p.lon, LPPT.lat, LPPT.lon);
+    if(d > 40) return false;
+    return !q || p.name.toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q);
+  });
+  const list = document.getElementById('ptList');
+  document.getElementById('ptCount').textContent = `(${allPoints().length})`;
+  list.innerHTML = '';
+  if(!pts.length){
+    list.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted);font-size:11px;">Nenhum ponto encontrado</div>';
+    return;
+  }
+  pts.forEach(p => {
+    const d = document.createElement('div');
+    d.className = 'pt-item' + (selectedPoint===p?'  sel':'');
+    d.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="pt-name">${p.name}</span>
+        <span class="pt-type ${p.type}">${p.type==='aip'?'AIP':'Manual'}</span>
+        ${p.type==='user'?`<button onclick="removePoint('${p.name}');event.stopPropagation();" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;padding:0 0 0 6px;">✕</button>`:''}
+      </div>
+      <div class="pt-coords">${p.desc||''}</div>
+      <div class="pt-coords">${toDMS(p.lat,'lat')}  ${toDMS(p.lon,'lon')}</div>`;
+    d.addEventListener('click',()=>{
+      selectedPoint=p;
+      document.getElementById('ptSelName').textContent=p.name;
+      document.querySelectorAll('.pt-item').forEach(el=>el.classList.remove('sel'));
+      d.classList.add('sel');
+    });
+    list.appendChild(d);
+  });
+}
+
+// ── ADD / REMOVE MANUAL POINT ──────────────────────────────────────────────
+function addManualPoint(){
+  const name = document.getElementById('ptName').value.trim().toUpperCase();
+  const lat  = parseFloat(document.getElementById('ptLat').value);
+  const lon  = parseFloat(document.getElementById('ptLon').value);
+  if(!name){ alert('Introduz um nome para o ponto.'); return; }
+  if(isNaN(lat)||isNaN(lon)){ alert('Coordenadas inválidas. Usa formato decimal (ex: 38.8419, -9.2173).'); return; }
+  if(Math.abs(lat)>90||Math.abs(lon)>180){ alert('Coordenadas fora de gama.'); return; }
+  if(userPoints.find(p=>p.name===name)){ alert('Já existe um ponto com esse nome.'); return; }
+  userPoints.push({name, lat, lon, type:'user', desc:'Ponto manual'});
+  sessionStorage.setItem('userPoints', JSON.stringify(userPoints));
+  document.getElementById('ptName').value='';
+  document.getElementById('ptLat').value='';
+  document.getElementById('ptLon').value='';
+  renderPointList();
+}
+
+function removePoint(name){
+  userPoints = userPoints.filter(p=>p.name!==name);
+  sessionStorage.setItem('userPoints', JSON.stringify(userPoints));
+  if(selectedPoint&&selectedPoint.name===name) selectedPoint=null;
+  renderPointList();
+}
+
+// ── HAVERSINE DISTANCE (NM) ────────────────────────────────────────────────
+function distNM(lat1,lon1,lat2,lon2){
+  const R=3440.065; // Earth radius in NM
+  const dLat=(lat2-lat1)*Math.PI/180;
+  const dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.asin(Math.sqrt(a));
+}
+
+// ── QUERY: find all flight positions within radius ─────────────────────────
+function queryPoint(){
+  if(!selectedPoint){ alert('Selecciona um ponto primeiro.'); return; }
+  const radius = parseFloat(document.getElementById('ptRadius').value)||1;
+  const pt = selectedPoint;
+  ptQueryResults = [];
+
+  // Use flights that pass the global filter (date/block from applyFilter) AND are visible in sidebar
+  const flightsToSearch = Object.fromEntries(
+    Object.entries(flights).filter(([csn,f])=>isFlightVisible(csn,f))
+  );
+
+  Object.entries(flightsToSearch).forEach(([csn,f])=>{
+    f.rows.forEach(r=>{
+      const lat=+r.latitude||0, lon=+r.longitude||0;
+      if(!lat&&!lon) return;
+      const d=distNM(pt.lat,pt.lon,lat,lon);
+      if(d<=radius){
+        ptQueryResults.push({
+          csn, d: d.toFixed(2),
+          tod: String(r.tod||'').substring(0,12),
+          date: r._date ? fmtDate(String(r._date)) : '',
+          block: r._block||'',
+          alt: getAlt(r),
+          tas: gv(r,'tas','tasa'),
+          ias: gv(r,'iar','iara'),
+          roc: gv(r,'roc'),
+          lat: lat.toFixed(5),
+          lon: lon.toFixed(5),
+          color: f.color,
+        });
+      }
+    });
+  });
+
+  ptQueryResults.sort((a,b)=>a.date.localeCompare(b.date)||a.tod.localeCompare(b.tod));
+  renderPtResults(pt, radius);
+}
+
+function renderPtResults(pt, radius){
+  // Store params so toggleCoords can re-render without re-querying
+  window._lastPtRenderPt = pt;
+  window._lastPtRenderRadius = radius;
+  const res = ptQueryResults;
+  const empty = document.getElementById('ptEmpty');
+  const tbl   = document.getElementById('ptResultTable');
+  const count = document.getElementById('ptResultCount');
+
+  count.textContent = `${res.length} passagem(ns) encontrada(s) no raio de ${radius} NM`;
+
+  if(!res.length){
+    empty.style.display='flex';
+    empty.querySelector('.empty-ttl').textContent='Nenhum voo encontrado neste raio';
+    tbl.style.display='none';
+    return;
+  }
+  empty.style.display='none';
+  tbl.style.display='';
+
+  const geo_h = coordMode==='geo';
+  document.getElementById('ptResultHead').innerHTML=`<tr>
+    <th>Hora (TOD)</th><th>Data</th><th>Bloco</th><th>Voo</th>
+    <th>Dist (NM)</th><th>Altitude (ft)</th><th>TAS (kt)</th><th>IAS (kt)</th>
+    <th>ROC (fpm)</th><th>${geo_h?'Latitude (geo)':'Latitude'}</th><th>${geo_h?'Longitude (geo)':'Longitude'}</th>
+  </tr>`;
+
+  document.getElementById('ptResultBody').innerHTML = res.map(r=>{
+    const rn=parseFloat(r.roc);
+    const rcls=rn>0?'color:#22d3a0':rn<0?'color:#f87171':'';
+    const geo = coordMode==='geo';
+    const latV = geo ? toDMS(parseFloat(r.lat),'lat') : r.lat;
+    const lonV = geo ? toDMS(parseFloat(r.lon),'lon') : r.lon;
+    return `<tr>
+      <td>${r.tod}</td>
+      <td style="color:var(--muted);font-size:10px">${r.date}</td>
+      <td style="color:var(--muted);font-size:10px">${r.block}</td>
+      <td><span class="badge" style="background:${r.color}22;color:${r.color}">● ${r.csn}</span></td>
+      <td style="color:#f59e0b;font-weight:600">${r.d}</td>
+      <td style="color:#60a5fa">${r.alt}</td>
+      <td style="color:#22d3a0">${r.tas}</td>
+      <td style="color:#a78bfa">${r.ias}</td>
+      <td style="${rcls}">${r.roc}</td>
+      <td style="color:var(--muted);font-size:10px">${latV}</td>
+      <td style="color:var(--muted);font-size:10px">${lonV}</td>
+    </tr>`;
+  }).join('');
+
+  // Add circle to map
+  if(window._ptCircle) map.removeLayer(window._ptCircle);
+  window._ptCircle = L.circle([pt.lat,pt.lon],{
+    radius: radius*1852, // NM to metres
+    color:'#f59e0b', weight:2, fillColor:'#f59e0b', fillOpacity:.08,
+    dashArray:'6,4'
+  }).bindTooltip(`${pt.name} — ${radius} NM`).addTo(map);
+}
+
+function exportPtResult(){
+  if(!ptQueryResults.length){ alert('Sem resultados para exportar.'); return; }
+  const geo = coordMode==='geo';
+  const latCol = geo ? 'Latitude_geo' : 'Latitude_dec';
+  const lonCol = geo ? 'Longitude_geo' : 'Longitude_dec';
+  const hdr=`Hora;Data;Bloco;Voo;Dist_NM;Altitude_ft;TAS_kt;IAS_kt;ROC_fpm;${latCol};${lonCol}`;
+  const lines=ptQueryResults.map(r=>{
+    const latV = geo ? toDMS(parseFloat(r.lat),'lat') : r.lat;
+    const lonV = geo ? toDMS(parseFloat(r.lon),'lon') : r.lon;
+    return `${r.tod};${r.date};${r.block};${r.csn};${r.d};${r.alt};${r.tas};${r.ias};${r.roc};${latV};${lonV}`;
+  });
+  const csv=[hdr,...lines].join('\r\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  const ptName=selectedPoint?selectedPoint.name:'ponto';
+  a.download=`passagens_${ptName}_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// init points list on load
+renderPointList();
+</script>
+</body>
+</html>
