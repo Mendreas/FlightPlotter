@@ -35,6 +35,10 @@ function renderDay() {
 function refresh() {
   updTimeDsp(simT);
   document.getElementById('timeSlider').value = simT;
+
+  // Drop every radar icon and rebuild for simT — avoids stale positions after timeline jumps.
+  for(const id of [...markers.keys()]) removeMarker(id);
+
   updateMarkers(simT);
 
   if(opdiVisible || selTrk) {
@@ -44,29 +48,32 @@ function refresh() {
   }
 
   if(typeof renderNavGroundLayer === 'function') renderNavGroundLayer(simT);
-  if(selTrk) updPanel();
+
+  if(selTrk){
+    const tk = tracks.get(selTrk);
+    if(!tk || !trackActiveAt(tk, simT)) clearSelectionPanel();
+    else updPanel();
+  }
+
+  const cnt = typeof countVisibleAt === 'function' ? countVisibleAt(simT) : 0;
+  document.getElementById('acft-count').textContent = `${cnt} aeronave${cnt!==1?'s':''}`;
 }
 
 function updateMarkers(t) {
-  let cnt = 0;
   for(const [id, tk] of tracks) {
-    if(t < fStart || t > fEnd) { removeMarker(id); continue; }
+    if(t < fStart || t > fEnd || !trackActiveAt(tk, t)) { removeMarker(id); continue; }
 
-    // Only suppress the radar marker for the selected aircraft AFTER radar has
-    // ended for arrivals, or BEFORE radar starts for departures. Never suppress
-    // live radar while the track still has a valid point.
     if(typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t)) {
       removeMarker(id);
-      cnt++;
       continue;
     }
 
-    let p = trackPointAt(tk, t);
+    const p = trackPointAt(tk, t);
     if(!p) { removeMarker(id); continue; }
+    if(tk.type === 'OVR' && !nearLppt(p.lat, p.lng)) { removeMarker(id); continue; }
+
     upsertMarker(id, tk, p, id === selTrk);
-    cnt++;
   }
-  document.getElementById('acft-count').textContent = `${cnt} aeronave${cnt!==1?'s':''}`;
 }
 
 function upsertMarker(id, tk, p, selected) {

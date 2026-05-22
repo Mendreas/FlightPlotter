@@ -2,9 +2,9 @@
 // Ground windows are anchored to radar track boundaries (tk.t0 / tk.t1) so the
 // icon stays visible from stand through climb, and from descent through stand.
 (function(){
-  if(window.__GROUND_FIX_V13__) return;
-  window.__GROUND_FIX_V13__ = true;
-  console.info('[FlightPlotter] ground_fix.js V13 radar-ground handoff loaded');
+  if(window.__GROUND_FIX_V14__) return;
+  window.__GROUND_FIX_V14__ = true;
+  console.info('[FlightPlotter] ground_fix.js V14 time-scoped visibility loaded');
 
   function clean(v){ return String(v ?? '').trim(); }
   function csKey(v){ return clean(v).toUpperCase(); }
@@ -214,12 +214,8 @@
     let count = 0;
 
     for(const item of currentNavRecords()){
-      const tk = findTrackObj(item.csn);
-      // Radar takes priority while the track still has live points.
-      if(tk){
-        if(item.navR.mt === 'ARRIVAL' && Number.isFinite(tk.t1) && t <= tk.t1) continue;
-        if(item.navR.mt === 'DEPARTURE' && Number.isFinite(tk.t0) && t >= tk.t0) continue;
-      }
+      const tk = findTrackObj(item.csn, t);
+      if(!tk || trackActiveAt(tk, t) !== 'ground') continue;
       const route = graphRoute(item.navR, tk);
       const pos = interpolateRoute(route, item.navR, t, tk);
       if(!pos) continue;

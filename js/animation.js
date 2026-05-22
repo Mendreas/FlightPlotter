@@ -25,10 +25,17 @@ function loop(ts) {
     if(simT<=fStart && speed<0){ simT=fStart; stopPlay(); }
 
     if(ts-lastMkUp>50) {   // 20 fps DOM updates
+      for(const id of [...markers.keys()]) removeMarker(id);
       updateMarkers(simT);
       if(opdiVisible || selTrk) renderOpdiLayer(simT);
       else if(typeof clearOpdiMarkers === 'function') clearOpdiMarkers();
       if(typeof renderNavGroundLayer === 'function') renderNavGroundLayer(simT);
+      if(selTrk){
+        const tk = tracks.get(selTrk);
+        if(!tk || !trackActiveAt(tk, simT)) clearSelectionPanel();
+      }
+      const cnt = typeof countVisibleAt === 'function' ? countVisibleAt(simT) : 0;
+      document.getElementById('acft-count').textContent = `${cnt} aeronave${cnt!==1?'s':''}`;
       updTimeDsp(simT);
       document.getElementById('timeSlider').value=simT;
       if(selTrk) updPanel();

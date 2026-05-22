@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 function selAircraft(id) {
   const tk = tracks.get(id);
-  if(!tk) return;
+  if(!tk || !trackActiveAt(tk, simT)) return;
   selTrk = id;
   updPanel();
   buildProfile(tk);
@@ -11,11 +11,28 @@ function selAircraft(id) {
   if(typeof renderOpdiLayer === 'function') renderOpdiLayer(simT);
 }
 
+function clearSelectionPanel() {
+  selTrk = null;
+  if(typeof clearTaxiRoute === 'function') clearTaxiRoute();
+  document.getElementById('ph-csn').textContent = '—';
+  document.getElementById('ph-csn').style.color = '#29b8ff';
+  document.getElementById('ph-type').textContent = 'Seleccione uma aeronave';
+  document.getElementById('ph-route').textContent = '—';
+  ['v-alt','v-ias','v-hdg','v-mac','v-roc','v-hex'].forEach(id=>{
+    document.getElementById(id).textContent = '—';
+  });
+  document.getElementById('nmir-section').style.display = 'none';
+  document.getElementById('nav-section').style.display = 'none';
+  if(profileChart){ profileChart.destroy(); profileChart = null; }
+  document.getElementById('pc-empty').style.display = '';
+  document.getElementById('profileChart').style.display = 'none';
+}
+
 function updPanel() {
   if(!selTrk) return;
   const tk   = tracks.get(selTrk);
-  if(!tk) return;
-  const p    = trackPointAt(tk, simT);
+  if(!tk || !trackActiveAt(tk, simT)) return;
+  const p    = trackPointAt(tk, simT) || interp(tk, Math.max(tk.t0, Math.min(simT, tk.t1)));
   if(!p) return;
   const info = osCache.get(tk.modeS)||{};
 

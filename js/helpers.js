@@ -18,22 +18,32 @@ function interp(tk,t) {
 
 function trackCallsignKey(v){ return String(v ?? '').trim().toUpperCase(); }
 
+// Radar or NAV-ground phase active at simulation time t (null = hide).
+function trackActiveAt(tk, t){
+  if(!tk?.pts?.length) return null;
+  if(t >= tk.t0 && t <= tk.t1) return 'radar';
+  const navR = tk.nav;
+  if(!navR || typeof navGroundTimes !== 'function') return null;
+  const gw = navGroundTimes(navR, tk);
+  if(!gw || t < gw.start || t > gw.end) return null;
+  if(navR.mt === 'ARRIVAL' && t > tk.t1) return 'ground';
+  if(navR.mt === 'DEPARTURE' && t < tk.t0) return 'ground';
+  return null;
+}
+
+function nearLppt(lat, lng, maxNm=30){
+  return distNM(lat, lng, LPPT[0], LPPT[1]) <= maxNm;
+}
+
 // Pick the track segment active at time t (radar window or NAV ground window).
 function findTrackAtTime(csn, t){
   const c = trackCallsignKey(csn);
   if(!c) return null;
-  let best = null, bestScore = Infinity;
   for(const [id, tk] of tracks){
     if(trackCallsignKey(tk.csn) !== c) continue;
-    if(t >= tk.t0 && t <= tk.t1) return String(id);
-    let score = t < tk.t0 ? tk.t0 - t : t - tk.t1;
-    if(tk.nav && typeof navGroundTimes === 'function'){
-      const gw = navGroundTimes(tk.nav, tk);
-      if(gw && t >= gw.start && t <= gw.end) score = 0;
-    }
-    if(score < bestScore){ bestScore = score; best = String(id); }
+    if(trackActiveAt(tk, t)) return String(id);
   }
-  return best;
+  return null;
 }
 
 function findTrackObjAtTime(csn, t){
@@ -41,18 +51,32 @@ function findTrackObjAtTime(csn, t){
   return id != null ? tracks.get(+id) || tracks.get(id) : null;
 }
 
-// Best-effort position for panel/map when radar, hold, or clamped extrapolation applies.
+// Radar position only — ground gaps are drawn by the NAV/OPDI layers.
 function trackPointAt(tk, t){
-  if(!tk?.pts?.length) return null;
-  if(t >= tk.t0 && t <= tk.t1) return interp(tk, t);
-  if(tk.nav && typeof navGroundTimes === 'function'){
-    const gw = navGroundTimes(tk.nav, tk);
-    if(gw && t >= gw.start && t <= gw.end){
-      if(tk.nav.mt === 'ARRIVAL' && t > tk.t1) return interp(tk, tk.t1);
-      if(tk.nav.mt === 'DEPARTURE' && t < tk.t0) return interp(tk, tk.t0);
+  if(trackActiveAt(tk, t) !== 'radar') return null;
+  return interp(tk, t);
+}
+
+function countVisibleAt(t){
+  let n = 0;
+  for(const tk of tracks.values()){
+    if(t < fStart || t > fEnd) continue;
+    const phase = trackActiveAt(tk, t);
+    if(!phase) continue;
+    if(phase === 'ground'){
+      if(typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t)) n++;
+      continue;
     }
+    if(typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t)){
+      n++;
+      continue;
+    }
+    const p = trackPointAt(tk, t);
+    if(!p) continue;
+    if(tk.type === 'OVR' && !nearLppt(p.lat, p.lng)) continue;
+    n++;
   }
-  return null;
+  return n;
 }
 
 function hdgVel(vx,vy) {
