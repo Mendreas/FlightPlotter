@@ -1,4 +1,4 @@
-# FlightPlotter V5.5 — OSM taxi-network
+# FlightPlotter V5.6
 
 Esta versão adiciona uma primeira rede geométrica de circulação no solo baseada no OpenStreetMap/Overpass.
 
