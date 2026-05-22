@@ -37,9 +37,11 @@ function refresh() {
   document.getElementById('timeSlider').value = simT;
   updateMarkers(simT);
 
-  // OPDI/NAV ground display is intentionally limited to the selected aircraft.
-  if(selTrk && typeof renderOpdiLayer === 'function') renderOpdiLayer(simT);
-  else if(typeof clearOpdiMarkers === 'function') clearOpdiMarkers();
+  if(opdiVisible || selTrk) {
+    if(typeof renderOpdiLayer === 'function') renderOpdiLayer(simT);
+  } else if(typeof clearOpdiMarkers === 'function') {
+    clearOpdiMarkers();
+  }
 
   if(typeof renderNavGroundLayer === 'function') renderNavGroundLayer(simT);
   if(selTrk) updPanel();
@@ -59,8 +61,18 @@ function updateMarkers(t) {
       continue;
     }
 
-    if(t < tk.t0 || t > tk.t1) { removeMarker(id); continue; }
-    const p = interp(tk, t);
+    let p = null;
+    if(t >= tk.t0 && t <= tk.t1) {
+      p = interp(tk, t);
+    } else if(typeof navGroundTimes === 'function' && tk.nav) {
+      const gw = navGroundTimes(tk.nav, tk);
+      if(gw && t >= gw.start && t <= gw.end) {
+        // Keep icon visible on runway/taxi if NAV/OPDI ground has not taken over yet.
+        if(tk.nav.mt === 'ARRIVAL' && t > tk.t1) p = interp(tk, tk.t1);
+        else if(tk.nav.mt === 'DEPARTURE' && t < tk.t0) p = interp(tk, tk.t0);
+      }
+    }
+    if(!p) { removeMarker(id); continue; }
     upsertMarker(id, tk, p, id === selTrk);
     cnt++;
   }
@@ -175,13 +187,13 @@ function updLabel(id, tk, p) {
 
   const originalOpdiRenderer = window.renderOpdiLayer;
   if(typeof originalOpdiRenderer === 'function'){
-    window.renderOpdiLayer = function selectedOnlyOpdiLayer(t){
-      if(!selTrk){
+    window.renderOpdiLayer = function opdiLayerWithSelection(t){
+      if(!selTrk && !opdiVisible){
         if(typeof clearOpdiMarkers === 'function') clearOpdiMarkers();
         return;
       }
       const oldVisible = opdiVisible;
-      opdiVisible = false;
+      if(selTrk) opdiVisible = false;
       try { originalOpdiRenderer(t); }
       finally { opdiVisible = oldVisible; }
     };

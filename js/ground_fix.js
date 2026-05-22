@@ -2,9 +2,9 @@
 // Ground windows are anchored to radar track boundaries (tk.t0 / tk.t1) so the
 // icon stays visible from stand through climb, and from descent through stand.
 (function(){
-  if(window.__GROUND_FIX_V12__) return;
-  window.__GROUND_FIX_V12__ = true;
-  console.info('[FlightPlotter] ground_fix.js V12 radar-ground handoff loaded');
+  if(window.__GROUND_FIX_V13__) return;
+  window.__GROUND_FIX_V13__ = true;
+  console.info('[FlightPlotter] ground_fix.js V13 radar-ground handoff loaded');
 
   function clean(v){ return String(v ?? '').trim(); }
   function csKey(v){ return clean(v).toUpperCase(); }
@@ -143,7 +143,7 @@
 
   function graphRoute(navR, tk=null){
     const toks = tokens(navR);
-    if(!toks.length || typeof buildAirfieldRouteFromTokens !== 'function') return [];
+    if(!toks.length || typeof buildAirfieldRouteFromTokens !== 'function') return routeFallback(navR, tk);
     const st = standCoordArr(navR);
     try {
       let r = [];
@@ -159,11 +159,19 @@
         if(!startCoord && typeof runwayCoord === 'function') startCoord = runwayCoord(navR);
         r = buildAirfieldRouteFromTokens(toks, startCoord, st);
       }
-      return Array.isArray(r) && r.length >= 2 ? r : [];
+      if(Array.isArray(r) && r.length >= 2) return r;
     } catch(e){
       console.warn('[FlightPlotter] graph route failed', navR.mt, toks.join(' '), e);
-      return [];
     }
+    return routeFallback(navR, tk);
+  }
+
+  function routeFallback(navR, tk){
+    if(tk && typeof navRouteCoords === 'function'){
+      const r = navRouteCoords(tk);
+      if(Array.isArray(r) && r.length >= 2) return r;
+    }
+    return [];
   }
 
   function interpolateRoute(route, navR, t, tk=null){

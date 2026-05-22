@@ -27,6 +27,8 @@ function loop(ts) {
     if(ts-lastMkUp>50) {   // 20 fps DOM updates
       updateMarkers(simT);
       if(opdiVisible || selTrk) renderOpdiLayer(simT);
+      else if(typeof clearOpdiMarkers === 'function') clearOpdiMarkers();
+      if(typeof renderNavGroundLayer === 'function') renderNavGroundLayer(simT);
       updTimeDsp(simT);
       document.getElementById('timeSlider').value=simT;
       if(selTrk) updPanel();

@@ -163,6 +163,7 @@ async function loadDay(dk) {
     calcStats();  // recalc stats with correct types
     if(APP_CFG.allowExternalEnrichment) fetchAllOS(dk);
     else appLog('info','Enriquecimento OpenSky não executado: modo externo OFF.');
+    refresh();
   } catch(e) {
     console.error(e);
     alert('Erro ao carregar: '+e.message);
