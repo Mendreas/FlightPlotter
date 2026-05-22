@@ -2,9 +2,9 @@
 // Ground windows are anchored to radar track boundaries (tk.t0 / tk.t1) so the
 // icon stays visible from stand through climb, and from descent through stand.
 (function(){
-  if(window.__GROUND_FIX_V18__) return;
-  window.__GROUND_FIX_V18__ = true;
-  console.info('[FlightPlotter] ground_fix.js V18 NAV time window loaded');
+  if(window.__GROUND_FIX_V19__) return;
+  window.__GROUND_FIX_V19__ = true;
+  console.info('[FlightPlotter] ground_fix.js V19 OSM polyline taxi loaded');
 
   function clean(v){ return String(v ?? '').trim(); }
   function csKey(v){ return clean(v).toUpperCase(); }
@@ -140,22 +140,49 @@
   window.navGroundTimes = navGroundTimes;
   try { navGroundTimes = window.navGroundTimes; } catch(e) {}
 
+  function standAnchor(navR){
+    const st = navR.mt === 'DEPARTURE' ? navR.standd : navR.standa;
+    try {
+      if(typeof airfieldStandCoord === 'function'){
+        const osm = airfieldStandCoord(st);
+        if(osm) return osm;
+      }
+    } catch(e) {}
+    // Apron centroids are only rough — anchoring there creates straight-line jumps
+    // from grass onto the taxiway graph. Start at the first named taxiway instead.
+    return null;
+  }
+
+  function depRouteEnd(navR, tk){
+    if(typeof tokenCoord === 'function'){
+      const hp = tokenCoord(navR.hp);
+      if(hp) return hp;
+    }
+    if(typeof runwayCoord === 'function'){
+      const rwy = runwayCoord(navR);
+      if(rwy) return rwy;
+    }
+    // Never tie the taxi polyline to the first radar point: it is often airborne or
+    // on the runway centreline off-graph, producing impossible chords over the field.
+    return null;
+  }
+
   function graphRoute(navR, tk=null){
     const toks = tokens(navR);
     if(!toks.length || typeof buildAirfieldRouteFromTokens !== 'function') return routeFallback(navR, tk);
-    const st = standCoordArr(navR);
+    const st = standAnchor(navR);
     try {
       let r = [];
       if(navR.mt === 'DEPARTURE'){
-        const fp = tk?.pts?.[0];
-        let endCoord = fp ? [fp.lat, fp.lng] : null;
-        if(!endCoord && typeof tokenCoord === 'function') endCoord = tokenCoord(navR.hp);
-        if(!endCoord && typeof runwayCoord === 'function') endCoord = runwayCoord(navR);
-        r = buildAirfieldRouteFromTokens(toks, st, endCoord);
+        r = buildAirfieldRouteFromTokens(toks, st, depRouteEnd(navR, tk));
       } else {
         const lp = tk?.pts?.length ? tk.pts[tk.pts.length - 1] : null;
-        let startCoord = lp ? [lp.lat, lp.lng] : null;
-        if(!startCoord && typeof runwayCoord === 'function') startCoord = runwayCoord(navR);
+        let startCoord = null;
+        if(lp && lp.alt < 800 && typeof nearLppt === 'function' && nearLppt(lp.lat, lp.lng, 3)){
+          startCoord = [lp.lat, lp.lng];
+        } else if(typeof runwayCoord === 'function'){
+          startCoord = runwayCoord(navR);
+        }
         r = buildAirfieldRouteFromTokens(toks, startCoord, st);
       }
       if(Array.isArray(r) && r.length >= 2) return r;

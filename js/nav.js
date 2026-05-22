@@ -316,15 +316,16 @@ function navRouteCoords(tk){
   const rwyP = runwayCoord(navR);
 
   if(isDep){
-    const startCoord = standP || null;
-    const endCoord = fp ? [fp.lat, fp.lng] : (hpP || rwyP || null);
+    const startCoord = standP && typeof airfieldStandCoord === 'function' && airfieldStandCoord(stand) ? standP : null;
+    const endCoord = hpP || rwyP || null;
     if(typeof buildAirfieldRouteFromTokens === 'function') {
       const osmPath = buildAirfieldRouteFromTokens(tokens, startCoord, endCoord);
       if(osmPath && osmPath.length >= 2) return dedupCoords(osmPath);
     }
   } else {
-    const startCoord = lp ? [lp.lat, lp.lng] : (rwyP || null);
-    const endCoord = standP || null;
+    const startCoord = lp && lp.alt < 800 && distNM(lp.lat, lp.lng, LPPT[0], LPPT[1]) < 3
+      ? [lp.lat, lp.lng] : (rwyP || null);
+    const endCoord = standP && typeof airfieldStandCoord === 'function' && airfieldStandCoord(stand) ? standP : null;
     if(typeof buildAirfieldRouteFromTokens === 'function') {
       const osmPath = buildAirfieldRouteFromTokens(tokens, startCoord, endCoord);
       if(osmPath && osmPath.length >= 2) return dedupCoords(osmPath);

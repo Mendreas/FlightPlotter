@@ -179,7 +179,13 @@
   };
 
   window.buildAirfieldRouteFromTokens = function(tokens,startCoord=null,endCoord=null){
-    return window.buildLpptTaxiRouteGraph(tokens,startCoord,endCoord);
+    // Prefer OSM taxiway centreline polylines — the graph router uses simplified
+    // nodes and straight chords that cut across grass/runways (see TAP1136/RZO9174).
+    if(typeof buildOsmPolylineRouteFromTokens === 'function'){
+      const osm = buildOsmPolylineRouteFromTokens(tokens, startCoord, endCoord);
+      if(osm && osm.length >= 2) return osm;
+    }
+    return window.buildLpptTaxiRouteGraph(tokens, startCoord, endCoord);
   };
 
   window.lpptTaxiRouterSummary = function(){

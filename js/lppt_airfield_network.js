@@ -258,7 +258,7 @@ function appendCoordsPath(out, coords, label, kind='twy'){
   }
 }
 
-function buildAirfieldRouteFromTokens(tokens, startCoord=null, endCoord=null){
+function buildOsmPolylineRouteFromTokens(tokens, startCoord=null, endCoord=null){
   if(!LPPT_OSM_NETWORK.loaded || !Array.isArray(tokens) || !tokens.length) return null;
   const out=[];
   let prev = startCoord || null;
@@ -277,6 +277,11 @@ function buildAirfieldRouteFromTokens(tokens, startCoord=null, endCoord=null){
   if(endCoord) appendCoordsPath(out, [endCoord], 'end', 'end');
   if(used === 0 || out.length < 2) return null;
   return out;
+}
+
+// Legacy name used across the app — may be replaced by the graph router wrapper.
+function buildAirfieldRouteFromTokens(tokens, startCoord=null, endCoord=null){
+  return buildOsmPolylineRouteFromTokens(tokens, startCoord, endCoord);
 }
 
 function osmNetworkSummary(){
