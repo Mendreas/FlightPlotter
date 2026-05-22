@@ -150,29 +150,17 @@ function renderTaxiRoute(tk) {
   clearTaxiRoute();
   if(!tk) return;
 
-  // Prefer the NAV taxi route because it contains the planned/operational taxiway sequence
-  // shown in the panel (e.g. U4 U3 U2 U1). If NAV route is not usable, fallback to OPDI GPS.
-  const navPts = navRouteCoords(tk);
-  if(navPts.length >= 2){
-    const clr = tk.type==='DEP' ? '#1a88ff' : '#f5a500';
-    taxiRouteLayer = L.polyline(navPts.map(p=>[p.lat,p.lng]), {
-      color:clr, weight:3, opacity:.85,
-      dashArray:'7,5', interactive:false
-    }).addTo(map);
-    return;
-  }
-
-  // Fallback: build route from OPDI ground events (actual GPS positions)
+  // Do not draw the synthetic NAV planned-route line. With only taxiway names
+  // (U4 U3 U2...), the line between centroid points can look like a strange
+  // zig-zag over the airport. If OPDI has real GPS ground events, show that
+  // real route; otherwise keep the map clean and only animate the aircraft.
   const pts = [];
   for(const [,seg] of opdiTracks) {
     if(seg.csn !== (tk.csn||'').toUpperCase()) continue;
-    const segMid = (seg.pts[0].t + seg.pts[seg.pts.length-1].t) / 2;
-    if(Math.abs(segMid - (tk.t0+tk.t1)/2) > 5400) continue;
     for(const p of seg.pts) {
-      if(!p.synthetic && p.lat && p.lng)
-        pts.push([p.lat, p.lng]);
+      if(!p.synthetic && p.lat && p.lng) pts.push([p.lat, p.lng]);
     }
-    break;
+    if(pts.length) break;
   }
 
   if(pts.length < 2) return;
@@ -252,20 +240,53 @@ function runwayCoord(navR){
   return null;
 }
 
-function navGroundTimes(navR){
+function validS(v){
+  const n = hm2s(v);
+  return isFinite(n) ? n : null;
+}
+
+function firstTrackPoint(tk){
+  const p = tk?.pts?.[0];
+  return p ? {lat:p.lat, lng:p.lng, label:'radar start', kind:'radar'} : null;
+}
+
+function lastTrackPoint(tk){
+  const p = tk?.pts?.[tk.pts.length-1];
+  return p ? {lat:p.lat, lng:p.lng, label:'radar end', kind:'radar'} : null;
+}
+
+function navGroundTimes(navR, tk=null){
   if(!navR) return null;
   let start = null, end = null;
+
   if(navR.mt === 'ARRIVAL'){
-    start = hm2s(navR.rwyVac || navR.aldt);
-    end   = hm2s(navR.aibt);
-    if(!isFinite(start)) start = hm2s(navR.aldt);
-    if(!isFinite(end) && isFinite(start)) end = start + 8*60;
+    const aibt = validS(navR.aibt);
+    const aldt = validS(navR.aldt);
+    const vac  = validS(navR.rwyVac);
+    const trackEnd = tk?.type === 'ARR' && isFinite(tk.t1) ? tk.t1 : null;
+
+    // Start as soon as the airborne/radar track has reached the runway, not only
+    // at RWY_VAC. This avoids the aircraft vanishing on the runway between
+    // touchdown and taxiway exit.
+    const candidates = [aldt, trackEnd, vac].filter(v => v!=null);
+    start = candidates.length ? Math.min(...candidates) : null;
+    end = aibt;
+    if(end==null && start!=null) end = start + 8*60;
   } else if(navR.mt === 'DEPARTURE'){
-    start = hm2s(navR.aobt);
-    end   = hm2s(navR.rwyEnt || navR.atot);
-    if(!isFinite(end)) end = hm2s(navR.atot);
-    if(!isFinite(end) && isFinite(start)) end = start + 12*60;
+    const aobt = validS(navR.aobt);
+    const ent  = validS(navR.rwyEnt);
+    const atot = validS(navR.atot);
+    const trackStart = tk?.type === 'DEP' && isFinite(tk.t0) ? tk.t0 : null;
+
+    start = aobt;
+    // End at the later of runway-entry/takeoff/radar-start so the aircraft
+    // continues to the correct runway entry instead of appearing mid-runway.
+    const candidates = [ent, atot, trackStart].filter(v => v!=null);
+    end = candidates.length ? Math.max(...candidates) : null;
+    if(start==null && end!=null) start = end - 12*60;
+    if(end==null && start!=null) end = start + 12*60;
   }
+
   if(!isFinite(start) || !isFinite(end) || end <= start) return null;
   return {start, end};
 }
@@ -294,11 +315,19 @@ function navRouteCoords(tk){
     if(standP) pts.push({lat:standP[0], lng:standP[1], label:stand?`Stand ${stand}`:'Stand', kind:'stand'});
     pts.push(...routePts);
     if(hpP && !sameCoordLast(pts, hpP)) pts.push({lat:hpP[0], lng:hpP[1], label:navR.hp, kind:'hp'});
-    if(rwyP && !sameCoordLast(pts, rwyP)) pts.push({lat:rwyP[0], lng:rwyP[1], label:'RWY '+(navR.rwy||''), kind:'rwy'});
+
+    // Use the first radar point as the final transition if available. It gives
+    // a smoother handoff to the real track than a rough runway threshold point.
+    const fp = firstTrackPoint(tk);
+    if(fp && !sameCoordLast(pts, [fp.lat, fp.lng])) pts.push(fp);
+    else if(rwyP && !sameCoordLast(pts, rwyP)) pts.push({lat:rwyP[0], lng:rwyP[1], label:'RWY '+(navR.rwy||''), kind:'rwy'});
   } else {
-    // ARR: start at the first exit/taxiway if route exists; otherwise runway vac/threshold fallback.
-    if(routePts.length) pts.push(...routePts);
+    // ARR: start from the last real radar point if possible. This preserves the
+    // visible aircraft at touchdown/rollout and then moves it towards TAXI_IN.
+    const lp = lastTrackPoint(tk);
+    if(lp) pts.push(lp);
     else if(rwyP) pts.push({lat:rwyP[0], lng:rwyP[1], label:'RWY '+(navR.rwy||''), kind:'rwy'});
+    pts.push(...routePts);
     if(standP) pts.push({lat:standP[0], lng:standP[1], label:stand?`Stand ${stand}`:'Stand', kind:'stand'});
   }
   return dedupCoords(pts);
@@ -370,15 +399,16 @@ function renderNavGroundLayer(t){
   for(const [id, tk] of tracks){
     const navR = tk.nav;
     if(!navR) continue;
-    const times = navGroundTimes(navR);
+    const times = navGroundTimes(navR, tk);
     if(!times || t < times.start || t > times.end) continue;
 
     // Show all ground aircraft in AD zoom. Always show the selected one.
     const selected = id === selTrk;
     if(!zOk && !selected) continue;
 
-    // If radar is already showing the aircraft, do not duplicate it.
-    if(radarHasTrackAt(tk, t)) continue;
+    // In ground phase, NAV synthetic animation intentionally takes priority over
+    // radar points below/near the runway. The radar marker is suppressed in
+    // updateMarkers() by shouldUseNavGroundForTrack().
 
     // If an actual OPDI marker is active, prefer OPDI over synthetic NAV.
     if(hasActiveOpdiGround(tk.csn, t)) continue;
@@ -441,6 +471,16 @@ function renderNavGroundLayer(t){
       navGroundLines.delete(key);
     }
   }
+}
+
+
+function shouldUseNavGroundForTrack(tk, t){
+  if(!tk?.nav) return false;
+  if(hasActiveOpdiGround(tk.csn, t)) return false;
+  const times = navGroundTimes(tk.nav, tk);
+  if(!times || t < times.start || t > times.end) return false;
+  const pts = navRouteCoords(tk);
+  return pts.length >= 2;
 }
 
 function clearNavGroundLayer(){

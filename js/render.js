@@ -49,7 +49,18 @@ function refresh() {
 function updateMarkers(t) {
   let cnt=0;
   for(const [id,tk] of tracks) {
-    if(t<tk.t0||t>tk.t1||t<fStart||t>fEnd){ removeMarker(id); continue; }
+    if(t<fStart||t>fEnd){ removeMarker(id); continue; }
+
+    // During NAV-defined ground movement, suppress the airborne/radar marker so
+    // the same aircraft does not disappear at touchdown or jump to mid-runway.
+    // renderNavGroundLayer() will draw the aircraft on the ground path.
+    if(typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t)){
+      removeMarker(id);
+      cnt++;
+      continue;
+    }
+
+    if(t<tk.t0||t>tk.t1){ removeMarker(id); continue; }
     const p = interp(tk,t);
     upsertMarker(id,tk,p, id===selTrk);
     cnt++;
