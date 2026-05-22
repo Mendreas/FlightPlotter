@@ -40,7 +40,21 @@ function s2hms(s) {
 }
 
 function s2hm(s){ return s2hms(s).slice(0,5); }
-function hm2s(hm){ const [h,m]=hm.split(':'); return +h*3600 + +m*60; }
+function hm2s(hm){
+  // Robust HH:MM / HH:MM:SS parser.
+  // Some NAV columns may be empty/null. Returning NaN here prevents the
+  // whole loading process from failing when a movement has missing times.
+  if(hm === null || hm === undefined || hm === '') return NaN;
+  const txt = String(hm).trim();
+  if(!txt || txt === '-' || txt.toLowerCase() === 'null' || txt.toLowerCase() === 'undefined') return NaN;
+  const p = txt.split(':');
+  if(p.length < 2) return NaN;
+  const h = parseInt(p[0], 10);
+  const m = parseInt(p[1], 10);
+  const sec = p.length > 2 ? parseFloat(p[2]) || 0 : 0;
+  if(!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
+  return h*3600 + m*60 + sec;
+}
 function updTimeDsp(s){ document.getElementById('timeDsp').textContent=s2hms(s); }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
