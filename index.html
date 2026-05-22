@@ -159,107 +159,12 @@
     </div>
   </div>
 
-  <!-- ATFM VIEW -->
-  <div id="atfm-view" style="flex:1;display:none;flex-direction:column;overflow-y:auto;padding:20px 22px;background:#edf1f7">
-    <div id="atfm-no-data" style="color:#8090a8;font-size:13px;padding:30px;text-align:center">
-      Carregue dados com ficheiro NMIR (xlsx) para ver estatísticas de atrasos ATFM.
-    </div>
-    <div id="atfm-content" style="display:none">
-      <div class="st-grid" id="atfm-cards"></div>
-      <div class="st-charts">
-        <div class="st-cbox"><h3>Atraso ATFM por Hora de Partida</h3><canvas id="ac-hourly"></canvas></div>
-        <div class="st-cbox"><h3>Distribuição de Atraso</h3><canvas id="ac-dist"></canvas></div>
-        <div class="st-cbox full"><h3>Top 10 Regulações com Mais Impacto (min)</h3><canvas id="ac-regs"></canvas></div>
-        <div class="st-cbox full"><h3>Lista de Voos com Atraso ATFM</h3>
-          <div style="overflow-x:auto">
-            <table id="atfm-table" style="width:100%;border-collapse:collapse;font-size:11px">
-              <thead><tr id="atfm-thead" style="background:#edf4fc;color:#2a6090;text-align:left"></tr></thead>
-              <tbody id="atfm-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- OPDI VIEW -->
-  <div id="opdi-view" style="flex:1;display:none;flex-direction:column;overflow-y:auto;padding:16px 20px;background:#edf1f7;gap:12px">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <div style="font-size:13px;font-weight:700;color:#1466b0;letter-spacing:1px">🛬 DADOS DE SOLO — OPDI</div>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <input id="opdi-search" type="text" placeholder="Pesquisar callsign ou evento..." style="background:#fff;border:1px solid #c8d8ec;border-radius:4px;padding:5px 10px;font-size:12px;width:220px;outline:none" oninput="filterOpdiTable(this.value)">
-        <button class="btn" onclick="clearOpdiSearch()">✕</button>
-      </div>
-    </div>
-    <div id="opdi-no-data" style="color:#8090a8;font-size:13px;padding:20px;text-align:center">Carregue dados OPDI (opdi_LPPT_*.csv) para ver os movimentos de solo.</div>
-    <div id="opdi-content" style="display:none;flex-direction:column;gap:12px">
-      <div class="st-charts" style="margin-bottom:4px">
-        <div class="st-cbox"><h3>Eventos por Tipo</h3><canvas id="oc-types"></canvas></div>
-        <div class="st-cbox"><h3>Movimentos por Hora</h3><canvas id="oc-hourly"></canvas></div>
-      </div>
-      <div class="st-cbox" style="padding:10px 14px">
-        <h3 style="margin-bottom:8px">LISTA DE MOVIMENTOS OPDI</h3>
-        <div style="overflow-x:auto">
-          <table id="opdi-table" style="width:100%;border-collapse:collapse;font-size:11px">
-            <thead><tr id="opdi-thead" style="background:#edf4fc;color:#2a6090;text-align:left"></tr></thead>
-            <tbody id="opdi-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- STATS VIEW — compact -->
-  <div id="stats-view" style="flex:1;display:none;flex-direction:column;overflow-y:auto;padding:14px 18px;background:#edf1f7">
-    <div class="st-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
-      <div class="st-card" style="padding:10px 12px"><h3>Total Voos</h3><div class="st-num" id="s-total" style="color:#1466b0;font-size:24px">—</div></div>
-      <div class="st-card" style="padding:10px 12px"><h3>Chegadas</h3><div class="st-num" id="s-arr" style="color:#c8a000;font-size:24px">—</div></div>
-      <div class="st-card" style="padding:10px 12px"><h3>Partidas</h3><div class="st-num" id="s-dep" style="color:#2266cc;font-size:24px">—</div></div>
-      <div class="st-card" style="padding:10px 12px"><h3>Sobrevoos</h3><div class="st-num" id="s-ovr" style="color:#cc44aa;font-size:24px">—</div></div>
-      <div class="st-card" style="padding:10px 12px"><h3>Hora Pico</h3><div class="st-num" id="s-peak" style="color:#1466b0;font-size:20px">—</div><div class="st-sub" id="s-peak-n"></div></div>
-      <div class="st-card" style="padding:10px 12px"><h3>IAS &lt;3000ft</h3><div class="st-num" id="s-ias" style="color:#0088cc;font-size:20px">—</div></div>
-    </div>
-    <div class="st-charts">
-      <div class="st-cbox"><h3>Distribuição Horária</h3><canvas id="sc-hourly"></canvas></div>
-      <div class="st-cbox"><h3>ARR / DEP / OVR</h3><canvas id="sc-pie"></canvas></div>
-      <div class="st-cbox full"><h3>IAS Média por Banda de Altitude</h3><canvas id="sc-iasalt"></canvas></div>
-    </div>
-  </div>
-
+  <div id="atfm-view" style="flex:1;display:none;flex-direction:column;overflow-y:auto;padding:20px 22px;background:#edf1f7"><div id="atfm-no-data" style="color:#8090a8;font-size:13px;padding:30px;text-align:center">Carregue dados com ficheiro NMIR (xlsx) para ver estatísticas de atrasos ATFM.</div><div id="atfm-content" style="display:none"><div class="st-grid" id="atfm-cards"></div><div class="st-charts"><div class="st-cbox"><h3>Atraso ATFM por Hora de Partida</h3><canvas id="ac-hourly"></canvas></div><div class="st-cbox"><h3>Distribuição de Atraso</h3><canvas id="ac-dist"></canvas></div><div class="st-cbox full"><h3>Top 10 Regulações com Mais Impacto (min)</h3><canvas id="ac-regs"></canvas></div><div class="st-cbox full"><h3>Lista de Voos com Atraso ATFM</h3><div style="overflow-x:auto"><table id="atfm-table" style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr id="atfm-thead" style="background:#edf4fc;color:#2a6090;text-align:left"></tr></thead><tbody id="atfm-tbody"></tbody></table></div></div></div></div></div>
+  <div id="opdi-view" style="flex:1;display:none;flex-direction:column;overflow-y:auto;padding:16px 20px;background:#edf1f7;gap:12px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div style="font-size:13px;font-weight:700;color:#1466b0;letter-spacing:1px">🛬 DADOS DE SOLO — OPDI</div><div style="margin-left:auto;display:flex;gap:8px;align-items:center"><input id="opdi-search" type="text" placeholder="Pesquisar callsign ou evento..." style="background:#fff;border:1px solid #c8d8ec;border-radius:4px;padding:5px 10px;font-size:12px;width:220px;outline:none" oninput="filterOpdiTable(this.value)"><button class="btn" onclick="clearOpdiSearch()">✕</button></div></div><div id="opdi-no-data" style="color:#8090a8;font-size:13px;padding:20px;text-align:center">Carregue dados OPDI (opdi_LPPT_*.csv) para ver os movimentos de solo.</div><div id="opdi-content" style="display:none;flex-direction:column;gap:12px"><div class="st-charts" style="margin-bottom:4px"><div class="st-cbox"><h3>Eventos por Tipo</h3><canvas id="oc-types"></canvas></div><div class="st-cbox"><h3>Movimentos por Hora</h3><canvas id="oc-hourly"></canvas></div></div><div class="st-cbox" style="padding:10px 14px"><h3 style="margin-bottom:8px">LISTA DE MOVIMENTOS OPDI</h3><div style="overflow-x:auto"><table id="opdi-table" style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr id="opdi-thead" style="background:#edf4fc;color:#2a6090;text-align:left"></tr></thead><tbody id="opdi-tbody"></tbody></table></div></div></div></div>
+  <div id="stats-view" style="flex:1;display:none;flex-direction:column;overflow-y:auto;padding:14px 18px;background:#edf1f7"><div class="st-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px"><div class="st-card" style="padding:10px 12px"><h3>Total Voos</h3><div class="st-num" id="s-total" style="color:#1466b0;font-size:24px">—</div></div><div class="st-card" style="padding:10px 12px"><h3>Chegadas</h3><div class="st-num" id="s-arr" style="color:#c8a000;font-size:24px">—</div></div><div class="st-card" style="padding:10px 12px"><h3>Partidas</h3><div class="st-num" id="s-dep" style="color:#2266cc;font-size:24px">—</div></div><div class="st-card" style="padding:10px 12px"><h3>Sobrevoos</h3><div class="st-num" id="s-ovr" style="color:#cc44aa;font-size:24px">—</div></div><div class="st-card" style="padding:10px 12px"><h3>Hora Pico</h3><div class="st-num" id="s-peak" style="color:#1466b0;font-size:20px">—</div><div class="st-sub" id="s-peak-n"></div></div><div class="st-card" style="padding:10px 12px"><h3>IAS &lt;3000ft</h3><div class="st-num" id="s-ias" style="color:#0088cc;font-size:20px">—</div></div></div><div class="st-charts"><div class="st-cbox"><h3>Distribuição Horária</h3><canvas id="sc-hourly"></canvas></div><div class="st-cbox"><h3>ARR / DEP / OVR</h3><canvas id="sc-pie"></canvas></div><div class="st-cbox full"><h3>IAS Média por Banda de Altitude</h3><canvas id="sc-iasalt"></canvas></div></div></div>
 </div>
 
-<!-- Controls Bar -->
-<div id="controls-bar">
-  <button class="cbtn" onclick="ctlJumpStart()" title="Início">⏮</button>
-  <button class="cbtn" onclick="ctlStepBack()"  title="−1 min">⏪</button>
-  <button class="cbtn" id="playbtn" onclick="togglePlay()" title="Play/Pausa">▶</button>
-  <button class="cbtn" onclick="ctlStepFwd()"   title="+1 min">⏩</button>
-  <button class="cbtn" onclick="ctlJumpEnd()"   title="Fim">⏭</button>
-
-  <div class="spd-grp">
-    <button class="sbtn" onclick="setSpeed(-8)">◀8×</button>
-    <button class="sbtn" onclick="setSpeed(-4)">◀4×</button>
-    <button class="sbtn" onclick="setSpeed(-2)">◀2×</button>
-    <button class="sbtn active" onclick="setSpeed(1)">1×</button>
-    <button class="sbtn" onclick="setSpeed(2)">2×</button>
-    <button class="sbtn" onclick="setSpeed(4)">4×</button>
-    <button class="sbtn" onclick="setSpeed(8)">8×</button>
-  </div>
-
-  <div id="slider-wrap" style="flex:1;min-width:80px;display:flex;flex-direction:column;gap:2px;position:relative">
-    <input type="range" id="timeSlider" min="0" max="86400" value="0" step="1" style="width:100%">
-    <div id="slider-ticks" style="position:relative;height:14px;width:100%;pointer-events:none"></div>
-  </div>
-  <span id="timeDsp">00:00:00</span>
-
-  <div class="tr-grp">
-    <span>De</span>
-    <input type="time" id="t-start" value="00:00" onchange="applyTimeFilter()">
-    <span>Até</span>
-    <input type="time" id="t-end"   value="23:59" onchange="applyTimeFilter()">
-  </div>
-</div>
-
+<div id="controls-bar"><button class="cbtn" onclick="ctlJumpStart()" title="Início">⏮</button><button class="cbtn" onclick="ctlStepBack()" title="−1 min">⏪</button><button class="cbtn" id="playbtn" onclick="togglePlay()" title="Play/Pausa">▶</button><button class="cbtn" onclick="ctlStepFwd()" title="+1 min">⏩</button><button class="cbtn" onclick="ctlJumpEnd()" title="Fim">⏭</button><div class="spd-grp"><button class="sbtn" onclick="setSpeed(-8)">◀8×</button><button class="sbtn" onclick="setSpeed(-4)">◀4×</button><button class="sbtn" onclick="setSpeed(-2)">◀2×</button><button class="sbtn active" onclick="setSpeed(1)">1×</button><button class="sbtn" onclick="setSpeed(2)">2×</button><button class="sbtn" onclick="setSpeed(4)">4×</button><button class="sbtn" onclick="setSpeed(8)">8×</button></div><div id="slider-wrap" style="flex:1;min-width:80px;display:flex;flex-direction:column;gap:2px;position:relative"><input type="range" id="timeSlider" min="0" max="86400" value="0" step="1" style="width:100%"><div id="slider-ticks" style="position:relative;height:14px;width:100%;pointer-events:none"></div></div><span id="timeDsp">00:00:00</span><div class="tr-grp"><span>De</span><input type="time" id="t-start" value="00:00" onchange="applyTimeFilter()"><span>Até</span><input type="time" id="t-end" value="23:59" onchange="applyTimeFilter()"></div></div>
 
 <script src="js/config.js"></script>
 <script src="js/diagnostics.js"></script>
@@ -269,6 +174,7 @@
 <script src="js/parser.js"></script>
 <script src="js/opdi.js"></script>
 <script src="js/lppt_airfield_network.js"></script>
+<script src="js/lppt_nav_router.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/render.js"></script>
 <script src="js/ground_fix.js"></script>
