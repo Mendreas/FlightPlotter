@@ -1,9 +1,10 @@
 // NAV ground plotting using graph-resolved taxiway routes only.
-// If a route cannot be resolved on the LPPT taxi graph, no synthetic target is drawn.
+// Ground windows are anchored to radar track boundaries (tk.t0 / tk.t1) so the
+// icon stays visible from stand through climb, and from descent through stand.
 (function(){
-  if(window.__GROUND_FIX_V11__) return;
-  window.__GROUND_FIX_V11__ = true;
-  console.info('[FlightPlotter] ground_fix.js V11 graph-only NAV ground loaded');
+  if(window.__GROUND_FIX_V12__) return;
+  window.__GROUND_FIX_V12__ = true;
+  console.info('[FlightPlotter] ground_fix.js V12 radar-ground handoff loaded');
 
   function clean(v){ return String(v ?? '').trim(); }
   function csKey(v){ return clean(v).toUpperCase(); }
@@ -97,26 +98,67 @@
     return typeof parseTaxiTokens === 'function' ? parseTaxiTokens(txt) : [];
   }
 
-  function navWindow(navR){
-    let s=null,e=null;
-    if(navR.mt === 'DEPARTURE'){
-      s = tsec(navR.aobt);
-      e = tsec(navR.rwyEnt) ?? tsec(navR.atot);
-    } else if(navR.mt === 'ARRIVAL'){
-      s = tsec(navR.rwyVac) ?? tsec(navR.aldt);
-      e = tsec(navR.aibt);
+  function findTrackObj(csn){
+    const c = csKey(csn);
+    for(const tk of tracks.values()){
+      if(csKey(tk.csn) === c) return tk;
     }
-    return Number.isFinite(s) && Number.isFinite(e) && e > s ? {start:s,end:e} : null;
+    return null;
   }
 
-  function graphRoute(navR){
+  function navRecForTrack(tk){
+    if(tk?.nav) return tk.nav;
+    const d = dateStr();
+    if(!d || !tk?.csn) return null;
+    return navMap.get(csKey(tk.csn)+'|'+d) || null;
+  }
+
+  // ARR: radar until tk.t1, then taxi to stand (AIBT).
+  // DEP: taxi from stand (AOBT) until first radar point tk.t0.
+  function navGroundTimes(navR, tk=null){
+    if(!navR) return null;
+    let start = null, end = null;
+
+    if(navR.mt === 'ARRIVAL'){
+      const trackEnd = tk && Number.isFinite(tk.t1) ? tk.t1 : null;
+      const vac = tsec(navR.rwyVac);
+      const aldt = tsec(navR.aldt);
+      const aibt = tsec(navR.aibt);
+      start = trackEnd ?? vac ?? aldt;
+      end = aibt ?? (start != null ? start + 8*60 : null);
+    } else if(navR.mt === 'DEPARTURE'){
+      const trackStart = tk && Number.isFinite(tk.t0) ? tk.t0 : null;
+      const aobt = tsec(navR.aobt);
+      const ent = tsec(navR.rwyEnt);
+      const atot = tsec(navR.atot);
+      start = aobt ?? (trackStart != null ? trackStart - 12*60 : null);
+      end = trackStart ?? ent ?? atot ?? (start != null ? start + 12*60 : null);
+    }
+
+    return Number.isFinite(start) && Number.isFinite(end) && end > start
+      ? {start, end} : null;
+  }
+  window.navGroundTimes = navGroundTimes;
+  try { navGroundTimes = window.navGroundTimes; } catch(e) {}
+
+  function graphRoute(navR, tk=null){
     const toks = tokens(navR);
     if(!toks.length || typeof buildAirfieldRouteFromTokens !== 'function') return [];
     const st = standCoordArr(navR);
-    const start = navR.mt === 'DEPARTURE' ? st : null;
-    const end = navR.mt === 'ARRIVAL' ? st : null;
     try {
-      const r = buildAirfieldRouteFromTokens(toks, start, end);
+      let r = [];
+      if(navR.mt === 'DEPARTURE'){
+        const fp = tk?.pts?.[0];
+        let endCoord = fp ? [fp.lat, fp.lng] : null;
+        if(!endCoord && typeof tokenCoord === 'function') endCoord = tokenCoord(navR.hp);
+        if(!endCoord && typeof runwayCoord === 'function') endCoord = runwayCoord(navR);
+        r = buildAirfieldRouteFromTokens(toks, st, endCoord);
+      } else {
+        const lp = tk?.pts?.length ? tk.pts[tk.pts.length - 1] : null;
+        let startCoord = lp ? [lp.lat, lp.lng] : null;
+        if(!startCoord && typeof runwayCoord === 'function') startCoord = runwayCoord(navR);
+        r = buildAirfieldRouteFromTokens(toks, startCoord, st);
+      }
       return Array.isArray(r) && r.length >= 2 ? r : [];
     } catch(e){
       console.warn('[FlightPlotter] graph route failed', navR.mt, toks.join(' '), e);
@@ -124,8 +166,8 @@
     }
   }
 
-  function interpolateRoute(route, navR, t){
-    const w = navWindow(navR);
+  function interpolateRoute(route, navR, t, tk=null){
+    const w = navGroundTimes(navR, tk);
     if(!w || t < w.start || t > w.end || route.length < 2) return null;
     const frac = Math.max(0, Math.min(1, (t-w.start)/Math.max(1,w.end-w.start)));
     return interpPath(route, frac);
@@ -147,16 +189,19 @@
   function selectedCsn(){ const tk = selTrk ? tracks.get(selTrk) : null; return csKey(tk && tk.csn); }
   function findTrack(csn){ const c=csKey(csn); for(const [id,tk] of tracks){ if(csKey(tk.csn)===c) return String(id); } return null; }
 
-  function navActiveForCallsign(csn,t){
-    const d = dateStr();
-    const rec = navMap.get(csKey(csn)+'|'+d);
-    if(!rec) return false;
-    const r = graphRoute(rec);
-    return !!interpolateRoute(r, rec, t);
-  }
-
   window.shouldUseNavGroundForTrack = function(tk,t){
-    return !!(tk && navActiveForCallsign(tk.csn,t));
+    if(!tk) return false;
+    const navR = navRecForTrack(tk);
+    if(!navR) return false;
+
+    // Never replace a live radar point — ground fills the gaps only.
+    if(navR.mt === 'ARRIVAL' && Number.isFinite(tk.t1) && t <= tk.t1) return false;
+    if(navR.mt === 'DEPARTURE' && Number.isFinite(tk.t0) && t >= tk.t0) return false;
+
+    const times = navGroundTimes(navR, tk);
+    if(!times || t < times.start || t > times.end) return false;
+    const route = graphRoute(navR, tk);
+    return route.length >= 2 && !!interpolateRoute(route, navR, t, tk);
   };
 
   window.renderNavGroundLayer = function(t){
@@ -166,8 +211,14 @@
     let count = 0;
 
     for(const item of currentNavRecords()){
-      const route = graphRoute(item.navR);
-      const pos = interpolateRoute(route, item.navR, t);
+      const tk = findTrackObj(item.csn);
+      // Radar takes priority while the track still has live points.
+      if(tk){
+        if(item.navR.mt === 'ARRIVAL' && Number.isFinite(tk.t1) && t <= tk.t1) continue;
+        if(item.navR.mt === 'DEPARTURE' && Number.isFinite(tk.t0) && t >= tk.t0) continue;
+      }
+      const route = graphRoute(item.navR, tk);
+      const pos = interpolateRoute(route, item.navR, t, tk);
       if(!pos) continue;
       const key = item.key;
       const sel = selC && selC === csKey(item.csn);
