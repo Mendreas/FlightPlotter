@@ -1,0 +1,33 @@
+{
+  "version": "4.7 NAV-safe modular",
+  "source": "FlightPlotterV4.6_NAV-safe_plus.html",
+  "files": [
+    "README.md",
+    "css/flightplotter.css",
+    "index.html",
+    "js/airport.js",
+    "js/animation.js",
+    "js/boot.js",
+    "js/charts.js",
+    "js/config.js",
+    "js/diagnostics.js",
+    "js/export.js",
+    "js/export_combined.js",
+    "js/helpers.js",
+    "js/map.js",
+    "js/modal.js",
+    "js/nav.js",
+    "js/opdi.js",
+    "js/opdi_tab.js",
+    "js/opensky.js",
+    "js/panel.js",
+    "js/parser.js",
+    "js/render.js",
+    "js/search.js",
+    "js/state.js",
+    "js/tabs.js",
+    "libs/README_LOCAL_LIBS.txt",
+    "scripts/download-libs.ps1",
+    "scripts/download-libs.sh"
+  ]
+}

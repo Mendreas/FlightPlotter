@@ -1,0 +1,407 @@
+// ═══════════════════════════════════════════════════════════════
+// NAV CSV — LPPT operational data
+// ═══════════════════════════════════════════════════════════════
+
+// ── Taxiway coordinate database (LPPT AIP AD 2.24.02, 2022-2023) ──
+// Each entry = approximate centroid/intersection [lat, lng]
+const LPPT_TWY = {
+  // Holding Points / Runway Entry
+  'M5': [38.7952,-9.1307], 'N2': [38.7962,-9.1295],
+  'U4': [38.7810,-9.1283], 'U5': [38.7822,-9.1298],
+  'S4': [38.7858,-9.1318], 'P':  [38.7688,-9.1432],
+  // M taxiway series (central connector to RWY 02 via north HP)
+  'M4': [38.7912,-9.1325], 'M3': [38.7875,-9.1348],
+  'M2': [38.7842,-9.1372], 'M1': [38.7805,-9.1393],
+  // A taxiway series (parallel RWY, east side)
+  'A1': [38.7712,-9.1385], 'A2': [38.7738,-9.1368],
+  'A3': [38.7762,-9.1352], 'A4': [38.7788,-9.1335],
+  'A5': [38.7818,-9.1308], 'A6': [38.7842,-9.1295],
+  'A7': [38.7870,-9.1288],
+  // U series (north area connecting apron 60/70 to runway)
+  'U1': [38.7892,-9.1335], 'U2': [38.7862,-9.1352],
+  'U3': [38.7838,-9.1362],
+  // Q series (central apron connectors)
+  'Q1': [38.7788,-9.1398], 'Q2': [38.7808,-9.1387],
+  'Q3': [38.7832,-9.1375],
+  // T series (Terminal 1 area)
+  'T1': [38.7758,-9.1402], 'T2': [38.7772,-9.1397],
+  'T3': [38.7788,-9.1390], 'T4': [38.7808,-9.1378],
+  // L series (Apron 40/41 connector)
+  'L1': [38.7742,-9.1418], 'L2': [38.7762,-9.1405],
+  // Z series (Apron 20, THR 02 area)
+  'Z1': [38.7698,-9.1442], 'Z2': [38.7710,-9.1438],
+  'Z3': [38.7682,-9.1445], 'Z4': [38.7668,-9.1440],
+  // W series (Apron 70/80, Terminal area connector)
+  'W1': [38.7845,-9.1382], 'W2': [38.7855,-9.1372],
+  'W3': [38.7868,-9.1362],
+  // G series (Apron 60/70)
+  'G1': [38.7878,-9.1360], 'G2': [38.7890,-9.1345],
+  // Single taxiways
+  'J':  [38.7795,-9.1398], 'E':  [38.7725,-9.1428],
+  'F':  [38.7898,-9.1338], 'B':  [38.7798,-9.1402],
+  'C':  [38.7818,-9.1393], 'K':  [38.7682,-9.1428],
+  'Y':  [38.7772,-9.1382], 'N1': [38.7702,-9.1440],
+  // Military apron connectors
+  'WD1':[38.7835,-9.1360],
+  // Threshold references (used as termination points)
+  'THR02':[38.7657,-9.1443], 'THR20':[38.7965,-9.1278],
+  'THR17':[38.7862,-9.1372], 'THR35':[38.7650,-9.1316],
+};
+
+async function loadNavCsv(file) {
+  navMap.clear();
+  try {
+    const text = await file.text();
+    const lines = text.split('\n');
+    const hdr   = lines[0].split(';').map(h=>h.trim());
+    validateHeader('NAV', hdr, ['MT','DATE','CALLSIGN']);
+    const col   = {};
+    hdr.forEach((h,i)=>col[h]=i);
+
+    for(let i=1;i<lines.length;i++){
+      const parts = lines[i].split(';');
+      if(parts.length<5) continue;
+      const mt   = parts[col['MT']]?.trim();
+      const date = parts[col['DATE']]?.trim().slice(0,10); // YYYY-MM-DD
+      const csn  = parts[col['CALLSIGN']]?.trim().toUpperCase();
+      if(!csn || !date || !mt) continue;
+
+      const fmtT = v => {
+        const s = (v||'').trim();
+        if(!s||s==='nan') return null;
+        // Format: 2026-03-01 14:22:33
+        const m = s.match(/\d{2}:\d{2}/);
+        return m ? m[0] : null;
+      };
+      const fmtF = v => { const n=parseFloat(v); return isNaN(n)?null:Math.round(n); };
+
+      const rec = {
+        mt, date,
+        acType:   parts[col['AC_TYPE']]?.trim()||null,
+        rwy:      parts[col['RWY']]?.trim()||null,
+        standd:   parts[col['STANDD']]?.trim()||null,
+        standa:   parts[col['STANDA']]?.trim()||null,
+        apron:    parts[col['APRON']]?.trim()||null,
+        taxiOut:  parts[col['TAXI_OUT']]?.trim()||null,
+        taxiIn:   parts[col['TAXI_IN']]?.trim()||null,
+        hp:       parts[col['HP']]?.trim()||null,
+        sid:      parts[col['SID']]?.trim()||null,
+        star:     parts[col['STAR']]?.trim()||null,
+        afix:     parts[col['AFIX']]?.trim()||null,
+        ades:     parts[col['ADES']]?.trim()||null,
+        adep:     parts[col['ADEP']]?.trim()||null,
+        aobt:     fmtT(parts[col['AOBT']]),
+        atot:     fmtT(parts[col['ATOT']]),
+        aldt:     fmtT(parts[col['ALDT']]),
+        aibt:     fmtT(parts[col['AIBT']]),
+        ctot:     fmtT(parts[col['CTOT']]),
+        hpTime:   fmtT(parts[col['HP_TIME']]),
+        rwyEnt:   fmtT(parts[col['RWY_ENT']]),
+        rwyVac:   fmtT(parts[col['RWY_VAC']]),
+        atfmDelay:fmtF(parts[col['ATFM_DELAY']]),
+        regulation:parts[col['REGULATION_NAME']]?.trim()||null,
+        wtc:       parts[col['ICAO_WTC']]?.trim()||null,
+        // Approach speed points (ARR only)
+        spd10nm: fmtF(parts[col['SPD@10_NM']]),
+        alt10nm: fmtF(parts[col['ALT@10_NM']]),
+        spd9nm:  fmtF(parts[col['SPD@9_NM']]),
+        alt9nm:  fmtF(parts[col['ALT@9_NM']]),
+        spd6nm:  fmtF(parts[col['SPD@6_NM']]),
+        alt6nm:  fmtF(parts[col['ALT@6_NM']]),
+        spd5nm:  fmtF(parts[col['SPD@5_NM']]),
+        alt5nm:  fmtF(parts[col['ALT@5_NM']]),
+        spd4nm:  fmtF(parts[col['SPD@4_NM']]),
+        alt4nm:  fmtF(parts[col['ALT@4_NM']]),
+        // Ground speed points
+        spdPassp: fmtF(parts[col['SPD@PASSP']]),
+        spdRwyVac:fmtF(parts[col['SPD@RWY_VAC']]),
+        spdPass35:fmtF(parts[col['SPD@PASS35_RWY']]),
+      };
+      navMap.set(`${csn}|${date}`, rec);
+    }
+    appLog('info', `NAV: ${navMap.size} movimentos carregados.`);
+  } catch(e) { appLog('error','Erro ao carregar NAV', e.message || String(e)); throw e; }
+}
+
+function enrichWithNav() {
+  const dateStr = fmtDateKey(dayKey);
+  for(const tk of tracks.values()) {
+    const csn = (tk.csn||'').toUpperCase();
+    if(!csn) continue;
+    const rec = navMap.get(`${csn}|${dateStr}`);
+    if(!rec) continue;
+    tk.nav = rec;
+    // Authoritative ADEP/ADES from operational data
+    if(rec.mt==='DEPARTURE' && rec.ades) tk.ades = rec.ades;
+    if(rec.mt==='DEPARTURE') tk.adep = 'LPPT';
+    if(rec.mt==='ARRIVAL'   && rec.adep) tk.adep = rec.adep;
+    if(rec.mt==='ARRIVAL')    tk.ades = 'LPPT';
+    // Aircraft type
+    if(rec.acType) {
+      const ex = osCache.get(tk.modeS)||{};
+      if(!ex.type) osCache.set(tk.modeS,{...ex,type:rec.acType});
+    }
+  }
+  updVisibleLabels();
+}
+
+// ── Taxi route visualisation — uses OPDI GPS positions ────────
+function renderTaxiRoute(tk) {
+  clearTaxiRoute();
+  if(!tk) return;
+
+  // Try to build route from OPDI ground events (actual GPS positions)
+  // These are far more accurate than hardcoded coordinates
+  const pts = [];
+  for(const [,seg] of opdiTracks) {
+    if(seg.csn !== (tk.csn||'').toUpperCase()) continue;
+    // Match segment by time overlap with this radar track (±30 min)
+    const segMid = (seg.pts[0].t + seg.pts[seg.pts.length-1].t) / 2;
+    if(Math.abs(segMid - (tk.t0+tk.t1)/2) > 5400) continue;
+    for(const p of seg.pts) {
+      if(!p.synthetic && p.lat && p.lng)
+        pts.push([p.lat, p.lng]);
+    }
+    break;
+  }
+
+  if(pts.length < 2) return;  // no OPDI ground data — don't draw
+
+  const clr = tk.type==='DEP' ? '#1a88ff' : '#f5a500';
+  taxiRouteLayer = L.polyline(pts, {
+    color:clr, weight:3, opacity:.80,
+    dashArray:'7,5', interactive:false
+  }).addTo(map);
+}
+
+function clearTaxiRoute() {
+  if(taxiRouteLayer){ map.removeLayer(taxiRouteLayer); taxiRouteLayer=null; }
+}
+
+function standCoord(standNum, apron) {
+  // Approximate stand positions based on apron number
+  // Stand ranges per apron from AIP charts
+  const apronNum = parseInt(apron)||0;
+  const standN   = parseInt(standNum)||0;
+  const apronCenters = {
+    10:[38.7770,-9.1382], 11:[38.7750,-9.1378], 12:[38.7790,-9.1375],
+    14:[38.7760,-9.1398], 20:[38.7710,-9.1440], 22:[38.7720,-9.1432],
+    30:[38.7745,-9.1425], 40:[38.7760,-9.1415], 41:[38.7775,-9.1405],
+    42:[38.7788,-9.1395], 50:[38.7800,-9.1390], 60:[38.7825,-9.1378],
+    70:[38.7872,-9.1368], 80:[38.7892,-9.1352],
+  };
+  // Use small offsets per stand within apron
+  const base = apronCenters[apronNum];
+  if(!base) return null;
+  // Spread stands ~15m apart within apron
+  const offset = ((standN % 10) - 5) * 0.000135;
+  return [base[0] + offset * 0.5, base[1] + offset * 0.3];
+}
+async function loadNMIR(file, dk) {
+  nmirMap.clear();
+  try {
+    const buf  = await file.arrayBuffer();
+    const wb   = XLSX.read(buf, {type:'array', cellDates:true});
+
+    // Build date string from dayKey e.g. '260301' → '2026-03-01'
+    const dateStr = fmtDateKey(dk);         // e.g. '2026-03-01'
+    const [yyyy, mm] = dateStr.split('-');
+    const monthIdx   = parseInt(mm,10) - 1; // 0-based
+    const monthPT    = PT_MONTHS[monthIdx];
+    const sheetName  = wb.SheetNames.find(n=>{
+      const up = n.toUpperCase();
+      return up.includes(monthPT) && up.includes(yyyy);
+    });
+
+    if(!sheetName) throw new Error('Folha NMIR não encontrada para '+dateStr+'. Folhas disponíveis: '+wb.SheetNames.join(', '));
+
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {defval:''});
+
+    for(const r of rows) {
+      const csn  = String(r['Aircraft ID']||'').trim().toUpperCase();
+      if(!csn) continue;
+
+      // Determine flight date from LOBT or ATOT
+      let flightDate = dateStr; // default to loaded day
+      const lobt = r['LOBT'];
+      if(lobt instanceof Date) {
+        const d = lobt;
+        flightDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      } else if(typeof lobt==='string' && lobt.includes('-')) {
+        flightDate = lobt.slice(0,10);
+      }
+
+      const key = `${csn}|${flightDate}`;
+      const fmtT = v => {
+        if(!v) return null;
+        if(v instanceof Date) return `${String(v.getUTCHours()).padStart(2,'0')}:${String(v.getUTCMinutes()).padStart(2,'0')}`;
+        if(typeof v==='string') return v.slice(11,16)||null;
+        return null;
+      };
+
+      const delayRaw = r['ATFM Delay'];
+      const delay    = delayRaw===''||delayRaw==null ? null : Number(String(delayRaw).replace(',','.'));
+
+      nmirMap.set(key, {
+        acftType: String(r['Aircraft Type']||'').trim(),
+        ades:     String(r['ADES']||'').trim(),
+        etot:     fmtT(r['ETOT']),
+        ctot:     fmtT(r['CTOT']),
+        atot:     fmtT(r['ATOT']),
+        delay,
+        regulation: String(r['MP Regulation']||'').trim(),
+        conformance: String(r['Departure Conformance']||'').trim(),
+        flttyp: String(r['FLTTYP']||'').trim()
+      });
+    }
+    appLog('info', `NMIR: carregados ${nmirMap.size} voos da folha "${sheetName}".`);
+  } catch(e) {
+    appLog('error','Erro ao ler NMIR xlsx', e.message || String(e));
+    throw e;
+  }
+}
+
+function enrichWithNMIR() {
+  const dateStr = fmtDateKey(dayKey);
+  for(const tk of tracks.values()) {
+    const csn = (tk.csn||'').toUpperCase();
+    if(!csn) continue;
+    const rec = nmirMap.get(`${csn}|${dateStr}`);
+    if(!rec) continue;
+    // NMIR only has LPPT departures — apply regardless of current geometric type
+    // reclassifyTracks() will fix the type afterwards
+    tk.nmir = rec;
+    tk.ades = rec.ades || null;
+    tk.adep = 'LPPT';
+    const existing = osCache.get(tk.modeS)||{};
+    if(rec.acftType && !existing.type)
+      osCache.set(tk.modeS, {...existing, type: rec.acftType});
+  }
+  updVisibleLabels();
+}
+
+function reclassifyTracks() {
+  // Rule: if we know ADEP/ADES, use them to classify definitively.
+  // LPPT in ADES → ARR; LPPT in ADEP → DEP; neither → OVR.
+  // Fallback to geometric classification when ADEP/ADES unknown.
+  let changed = 0;
+  for(const tk of tracks.values()) {
+    const adep = (tk.adep||'').toUpperCase();
+    const ades = (tk.ades||'').toUpperCase();
+    let newType = tk.type;
+
+    if(adep === 'LPPT' && ades !== 'LPPT') newType = 'DEP';
+    else if(ades === 'LPPT' && adep !== 'LPPT') newType = 'ARR';
+    else if(adep === 'LPPT' && ades === 'LPPT') {
+      // LPPT–LPPT: keep geometric
+    } else if(adep && ades && adep !== 'LPPT' && ades !== 'LPPT') {
+      newType = 'OVR';
+    }
+    // If ADEP/ADES unknown, keep geometric classification
+
+    if(newType !== tk.type) {
+      tk.type = newType;
+      changed++;
+    }
+  }
+  if(changed > 0) {
+    console.log(`Reclassified ${changed} tracks using ADEP/ADES`);
+    updVisibleLabels();
+    updateMarkers(simT);
+  }
+}
+
+function buildTracks(rows) {
+  // ── Step 1: group raw points by trkNr ───────────────────
+  const raw = new Map();
+
+  for(const r of rows) {
+    const origId = r.trkNr;
+    if(origId==null || !r.latitude || !r.longitude) continue;
+    // Reject (0,0) ghost points
+    if(r.latitude===0 && r.longitude===0) continue;
+    if(!raw.has(origId)) raw.set(origId,{
+      origId,
+      csn:  String(r.csn||'').trim(),
+      modeS:String(r.modeS||'').toLowerCase().trim(),
+      pts:[]
+    });
+    const t = tod2s(r.tod);
+    if(isNaN(t)) continue;
+    raw.get(origId).pts.push({
+      t, lat:r.latitude, lng:r.longitude,
+      alt:(r.baroH||0)*100,
+      ias:r.iar||0, mac:r.mac||0,
+      roc:r.roc||0, vx:r.vx||0, vy:r.vy||0
+    });
+  }
+
+  // ── Step 2: sort, deduplicate, then SPLIT at gaps > 5 min ─
+  // The same trkNr is reused across CSV file boundaries, so a
+  // single trkNr bucket may contain two completely different flights.
+  // Splitting at gaps > 300 s separates them cleanly.
+  const GAP = 300;   // seconds — safe threshold between flights
+  let mn=Infinity, mx=-Infinity;
+  let uid=0;         // unique sequential ID for each final track
+
+  for(const [,tk] of raw) {
+    // sort by time
+    tk.pts.sort((a,b)=>a.t-b.t);
+
+    // deduplicate timestamps
+    const dedup=[tk.pts[0]];
+    for(let i=1;i<tk.pts.length;i++)
+      if(tk.pts[i].t > dedup[dedup.length-1].t) dedup.push(tk.pts[i]);
+
+    // split into segments wherever consecutive gap > GAP
+    const segs=[];
+    let seg=[dedup[0]];
+    for(let i=1;i<dedup.length;i++){
+      if(dedup[i].t - seg[seg.length-1].t > GAP){
+        if(seg.length>=2) segs.push(seg);
+        seg=[];
+      }
+      seg.push(dedup[i]);
+    }
+    if(seg.length>=2) segs.push(seg);
+
+    // register each segment as an independent track
+    for(const pts of segs){
+      // Filter ground/false tracks: any real flight exceeds 2000 ft at some point.
+      // Ground traffic at LPPT (~374 ft elevation) stays below ~700 ft.
+      let maxAlt = 0;
+      for(const p of pts) if(p.alt > maxAlt) maxAlt = p.alt;
+      if(maxAlt < 2000) continue;
+
+      const id = uid++;
+      const finalTk = { id, csn:tk.csn, modeS:tk.modeS, pts };
+      finalTk.t0   = pts[0].t;
+      finalTk.t1   = pts[pts.length-1].t;
+      finalTk.type = classifyTrack(finalTk);
+      mn = Math.min(mn, finalTk.t0);
+      mx = Math.max(mx, finalTk.t1);
+      tracks.set(id, finalTk);
+    }
+  }
+
+  tMin   = isFinite(mn)?mn:0;
+  tMax   = isFinite(mx)?mx:86400;
+  simT   = tMin;
+  fStart = tMin;
+  fEnd   = tMax;
+  document.getElementById('t-start').value = s2hm(tMin);
+  document.getElementById('t-end').value   = s2hm(tMax);
+}
+
+function classifyTrack(tk) {
+  const pts    = tk.pts;
+  const minAlt = Math.min(...pts.map(p=>p.alt));
+  const d0 = distNM(pts[0].lat,              pts[0].lng,              LPPT[0],LPPT[1]);
+  const d1 = distNM(pts[pts.length-1].lat,   pts[pts.length-1].lng,   LPPT[0],LPPT[1]);
+  if(minAlt < 4000) {
+    if(d1<d0 && d1<15) return 'ARR';
+    if(d0<d1 && d0<15) return 'DEP';
+    return d1<15 ? 'ARR' : 'DEP';
+  }
+  return 'OVR';
+}
