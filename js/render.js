@@ -39,9 +39,10 @@ function refresh() {
   updTimeDsp(simT);
   document.getElementById('timeSlider').value=simT;
   updateMarkers(simT);
-  // Always render OPDI: for zoom-visible layer AND for selected aircraft
-  if(opdiVisible || selTrk) renderOpdiLayer(simT);
-  // NAV ground animation keeps ARR/DEP visible on taxiways when radar data ends/has not started.
+  // OPDI/NAV ground display is intentionally limited to the selected aircraft.
+  // This avoids cluttering the AD view with every simultaneous ground movement.
+  if(selTrk && typeof renderOpdiLayer === 'function') renderOpdiLayer(simT);
+  else if(typeof clearOpdiMarkers === 'function') clearOpdiMarkers();
   if(typeof renderNavGroundLayer === 'function') renderNavGroundLayer(simT);
   if(selTrk) updPanel();
 }
@@ -51,9 +52,8 @@ function updateMarkers(t) {
   for(const [id,tk] of tracks) {
     if(t<fStart||t>fEnd){ removeMarker(id); continue; }
 
-    // During NAV-defined ground movement, suppress the airborne/radar marker so
-    // the same aircraft does not disappear at touchdown or jump to mid-runway.
-    // renderNavGroundLayer() will draw the aircraft on the ground path.
+    // During NAV-defined ground movement for the SELECTED aircraft, suppress
+    // the airborne/radar marker so handoff to taxi animation is clean.
     if(typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t)){
       removeMarker(id);
       cnt++;
@@ -131,3 +131,116 @@ function updLabel(id,tk,p) {
     `<span class="lbl-t">${esc(tp||tk.type)}${tp?' '+esc(adep)+'→'+esc(ades):''}</span>`
   );
 }
+
+// ═══════════════════════════════════════════════════════════════
+// GROUND DISPLAY OVERRIDES — selected aircraft only
+// ═══════════════════════════════════════════════════════════════
+(function installSelectedGroundOnlyOverrides(){
+  // Keep original OPDI renderer, but prevent it from drawing all ground traffic
+  // simply because the map is at AD zoom. With this wrapper, OPDI is shown only
+  // for the selected callsign.
+  const originalOpdiRenderer = window.renderOpdiLayer;
+  if(typeof originalOpdiRenderer === 'function'){
+    window.renderOpdiLayer = function selectedOnlyOpdiLayer(t){
+      if(!selTrk){
+        if(typeof clearOpdiMarkers === 'function') clearOpdiMarkers();
+        return;
+      }
+      const oldVisible = opdiVisible;
+      opdiVisible = false; // original renderer will then keep only selected OPDI
+      try { originalOpdiRenderer(t); }
+      finally { opdiVisible = oldVisible; }
+    };
+  }
+
+  // Override NAV/OSM ground renderer: draw only the selected aircraft. This keeps
+  // the airport readable and lets the user inspect one taxi movement at a time.
+  window.renderNavGroundLayer = function selectedOnlyNavGroundLayer(t){
+    if(!ensureNavGroundLayers()) return;
+    const keep = new Set();
+    if(!selTrk){
+      for(const [key,e] of [...navGroundMarkers]){
+        navGroundMarkerGroup.removeLayer(e.marker);
+        navGroundMarkers.delete(key);
+      }
+      for(const [key,line] of [...navGroundLines]){
+        navGroundLineGroup.removeLayer(line);
+        navGroundLines.delete(key);
+      }
+      return;
+    }
+
+    const tk = tracks.get(selTrk);
+    const navR = tk?.nav;
+    if(navR){
+      const times = navGroundTimes(navR, tk);
+      if(times && t >= times.start && t <= times.end){
+        const pts = navRouteCoords(tk);
+        if(pts.length >= 2){
+          const frac = (t - times.start) / (times.end - times.start);
+          const pos = interpPath(pts, frac);
+          if(pos){
+            const clr = navR.mt==='DEPARTURE' ? '#1a88ff' : '#f5a500';
+            const key = String(selTrk);
+            keep.add(key);
+
+            if(!navGroundLines.has(key)){
+              const line = L.polyline(pts.map(p=>[p.lat,p.lng]), {
+                color: clr, weight: 3, opacity: .78, dashArray:'7,5', interactive:false
+              });
+              navGroundLineGroup.addLayer(line);
+              navGroundLines.set(key, line);
+            }
+
+            const hdgRnd = Math.round(pos.hdg/5)*5;
+            const tip = `<span style="font-weight:700;color:${clr}">${esc(tk.csn||'')}</span><br>`+
+              `<span style="font-size:9px;color:#aaa">NAV/OSM ${esc(navR.mt==='DEPARTURE'?'taxi-out':'taxi-in')} — ${esc(pos.label||'')}</span>`;
+
+            if(!navGroundMarkers.has(key)){
+              const m = L.marker([pos.lat,pos.lng], {
+                icon: mkIcon(hdgRnd, clr, true), zIndexOffset: 260, interactive:true
+              }).bindTooltip(tip,{className:'acft-lbl',offset:[16,0]});
+              navGroundMarkerGroup.addLayer(m);
+              m.on('click',()=>selAircraft(selTrk));
+              navGroundMarkers.set(key,{marker:m, hdg:hdgRnd, selected:true});
+            } else {
+              const e = navGroundMarkers.get(key);
+              e.marker.setLatLng([pos.lat,pos.lng]);
+              if(Math.abs(hdgRnd-e.hdg)>4 || !e.selected){
+                e.marker.setIcon(mkIcon(hdgRnd, clr, true));
+                e.marker.options.zIndexOffset = 260;
+                e.hdg = hdgRnd; e.selected = true;
+              }
+              e.marker.getTooltip()?.setContent(tip);
+            }
+          }
+        }
+      }
+    }
+
+    for(const [key,e] of [...navGroundMarkers]){
+      if(!keep.has(key)){
+        navGroundMarkerGroup.removeLayer(e.marker);
+        navGroundMarkers.delete(key);
+      }
+    }
+    for(const [key,line] of [...navGroundLines]){
+      if(!keep.has(key)){
+        navGroundLineGroup.removeLayer(line);
+        navGroundLines.delete(key);
+      }
+    }
+  };
+
+  // Suppress radar marker only for the selected aircraft while it is inside the
+  // NAV ground window. OPDI is deliberately NOT allowed to block this decision,
+  // because the previous version made some selected aircraft vanish on the runway.
+  window.shouldUseNavGroundForTrack = function selectedOnlyShouldUseNavGround(tk, t){
+    if(!selTrk || tracks.get(selTrk) !== tk) return false;
+    if(!tk?.nav) return false;
+    const times = navGroundTimes(tk.nav, tk);
+    if(!times || t < times.start || t > times.end) return false;
+    const pts = navRouteCoords(tk);
+    return pts.length >= 2;
+  };
+})();
