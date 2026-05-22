@@ -2,9 +2,9 @@
 // Ground windows are anchored to radar track boundaries (tk.t0 / tk.t1) so the
 // icon stays visible from stand through climb, and from descent through stand.
 (function(){
-  if(window.__GROUND_FIX_V16__) return;
-  window.__GROUND_FIX_V16__ = true;
-  console.info('[FlightPlotter] ground_fix.js V16 NAV/type match loaded');
+  if(window.__GROUND_FIX_V17__) return;
+  window.__GROUND_FIX_V17__ = true;
+  console.info('[FlightPlotter] ground_fix.js V17 selection fix loaded');
 
   function clean(v){ return String(v ?? '').trim(); }
   function csKey(v){ return clean(v).toUpperCase(); }
@@ -231,15 +231,14 @@
 
       drawn.add(csn);
       const key = item.key;
-      const activeId = findTrack(item.csn, t);
-      const sel = selTrk && activeId && String(selTrk) === activeId;
+      const sel = selTrk != null && Number(selTrk) === Number(tk.id);
       const clr = item.navR.mt === 'DEPARTURE' ? '#1a88ff' : '#f5a500';
       count++;
       const hdg = Math.round((pos.hdg||0)/5)*5;
       const tip = '<span style="font-weight:700;color:'+clr+'">'+esc(item.csn||'')+'</span><br><span style="font-size:9px;color:#aaa">NAV graph '+(item.navR.mt==='DEPARTURE'?'DEP':'ARR')+' — '+esc(pos.label||'')+'</span>';
       const m = L.marker([pos.lat,pos.lng], {icon:mkIcon(hdg,clr,sel), zIndexOffset:sel?260:120, interactive:true}).bindTooltip(tip,{className:'acft-lbl',offset:[16,0]});
       navGroundMarkerGroup.addLayer(m);
-      m.on('click',()=>{ const id=findTrack(item.csn, simT); if(id != null) selAircraft(id); });
+      m.on('click',()=> selAircraft(tk.id));
       navGroundMarkers.set(key,{marker:m,hdg,selected:sel});
     }
 

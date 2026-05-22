@@ -50,7 +50,7 @@ function refresh() {
   if(typeof renderNavGroundLayer === 'function') renderNavGroundLayer(simT);
 
   if(selTrk){
-    const tk = trackById(selTrk);
+    const tk = tracks.get(selTrk);
     if(!tk || !trackActiveAt(tk, simT)) clearSelectionPanel();
     else updPanel();
   }
@@ -75,7 +75,7 @@ function updateMarkers(t) {
     if(!p) { removeMarker(id); continue; }
     if(tk.type === 'OVR' && !nearLppt(p.lat, p.lng)) { removeMarker(id); continue; }
 
-    upsertMarker(id, tk, p, id === selTrk);
+    upsertMarker(id, tk, p, Number(id) === Number(selTrk));
   }
 }
 

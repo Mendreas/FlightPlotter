@@ -32,7 +32,7 @@ function loop(ts) {
       else if(typeof clearOpdiMarkers === 'function') clearOpdiMarkers();
       if(typeof renderNavGroundLayer === 'function') renderNavGroundLayer(simT);
       if(selTrk){
-        const tk = trackById(selTrk);
+        const tk = tracks.get(selTrk);
         if(!tk || !trackActiveAt(tk, simT)) clearSelectionPanel();
       }
       const cnt = typeof countVisibleAt === 'function' ? countVisibleAt(simT) : 0;

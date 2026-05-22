@@ -102,8 +102,8 @@ async function handleNavFile(file) {
   showLD('A carregar dados NAV…');
   try {
     await loadNavCsv(file);
-    enrichWithNav();
     reclassifyTracks();
+    enrichWithNav();
     updVisibleLabels();
     document.getElementById('btn-nav')?.classList.add('active');
     document.getElementById('btn-nav').title = `NAV: ${navMap.size} movimentos`;
@@ -160,6 +160,7 @@ async function loadDay(dk) {
     }
     // Reclassify using ADEP/ADES from NMIR/OPDI (overrides geometric guess)
     reclassifyTracks();
+    if(navMap.size) enrichWithNav();
     calcStats();  // recalc stats with correct types
     if(APP_CFG.allowExternalEnrichment) fetchAllOS(dk);
     else appLog('info','Enriquecimento OpenSky não executado: modo externo OFF.');
