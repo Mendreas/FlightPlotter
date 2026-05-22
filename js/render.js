@@ -61,17 +61,7 @@ function updateMarkers(t) {
       continue;
     }
 
-    let p = null;
-    if(t >= tk.t0 && t <= tk.t1) {
-      p = interp(tk, t);
-    } else if(typeof navGroundTimes === 'function' && tk.nav) {
-      const gw = navGroundTimes(tk.nav, tk);
-      if(gw && t >= gw.start && t <= gw.end) {
-        // Keep icon visible on runway/taxi if NAV/OPDI ground has not taken over yet.
-        if(tk.nav.mt === 'ARRIVAL' && t > tk.t1) p = interp(tk, tk.t1);
-        else if(tk.nav.mt === 'DEPARTURE' && t < tk.t0) p = interp(tk, tk.t0);
-      }
-    }
+    let p = trackPointAt(tk, t);
     if(!p) { removeMarker(id); continue; }
     upsertMarker(id, tk, p, id === selTrk);
     cnt++;
@@ -120,7 +110,7 @@ function mkIcon(hdg, clr, sel) {
       fill="${clr}" stroke="rgba(0,0,0,.5)" stroke-width="${sw*4}"/>
   </svg>`;
   return L.divIcon({
-    html:`<div style="width:${sz}px;height:${sz}px;transform:rotate(${hdg}deg);transform-origin:center">${svg}</div>`,
+    html:`<div style="width:${sz}px;height:${sz}px;transform:rotate(${hdg}deg);transform-origin:center;cursor:pointer">${svg}</div>`,
     className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz/2]
   });
 }

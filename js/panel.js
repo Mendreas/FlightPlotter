@@ -2,31 +2,21 @@
 // AIRCRAFT SELECTION & PANEL
 // ═══════════════════════════════════════════════════════════════
 function selAircraft(id) {
-  const prev = selTrk;
-  selTrk = id;
   const tk = tracks.get(id);
   if(!tk) return;
-  // Never change simT when clicking — just show data for the selected aircraft
-  // Refresh icons for prev and current
-  if(prev && tracks.has(prev)) {
-    const pt = tracks.get(prev);
-    const pp = interp(pt,simT);
-    upsertMarker(prev,pt,pp,false);
-  }
-  const p=interp(tk,simT);
-  upsertMarker(id,tk,p,true);
+  selTrk = id;
   updPanel();
   buildProfile(tk);
   refresh();
-  // Always render OPDI for selected aircraft (shows taxi even when radar has ended)
-  renderOpdiLayer(simT);
+  if(typeof renderOpdiLayer === 'function') renderOpdiLayer(simT);
 }
 
 function updPanel() {
   if(!selTrk) return;
   const tk   = tracks.get(selTrk);
   if(!tk) return;
-  const p    = interp(tk,simT);
+  const p    = trackPointAt(tk, simT);
+  if(!p) return;
   const info = osCache.get(tk.modeS)||{};
 
   document.getElementById('ph-csn').textContent   = tk.csn||tk.modeS||'—';

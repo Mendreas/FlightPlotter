@@ -328,8 +328,8 @@ function renderOpdiLayer(t) {
         zIndexOffset:50, interactive:true
       }).bindTooltip(tip,{className:'acft-lbl',offset:[16,0]});opdiMarkerGroup.addLayer(m);
       m.on('click',()=>{
-        for(const tk of tracks.values())
-          if((tk.csn||'').toUpperCase()===csn){ selAircraft(tk.id); break; }
+        const id = findTrackAtTime(csn, simT);
+        if(id) selAircraft(id);
       });
       opdiMarkers.set(key,{marker:m, hdg:hdgRnd});
     } else {

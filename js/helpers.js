@@ -16,6 +16,45 @@ function interp(tk,t) {
           vx:p0.vx,vy:p0.vy};
 }
 
+function trackCallsignKey(v){ return String(v ?? '').trim().toUpperCase(); }
+
+// Pick the track segment active at time t (radar window or NAV ground window).
+function findTrackAtTime(csn, t){
+  const c = trackCallsignKey(csn);
+  if(!c) return null;
+  let best = null, bestScore = Infinity;
+  for(const [id, tk] of tracks){
+    if(trackCallsignKey(tk.csn) !== c) continue;
+    if(t >= tk.t0 && t <= tk.t1) return String(id);
+    let score = t < tk.t0 ? tk.t0 - t : t - tk.t1;
+    if(tk.nav && typeof navGroundTimes === 'function'){
+      const gw = navGroundTimes(tk.nav, tk);
+      if(gw && t >= gw.start && t <= gw.end) score = 0;
+    }
+    if(score < bestScore){ bestScore = score; best = String(id); }
+  }
+  return best;
+}
+
+function findTrackObjAtTime(csn, t){
+  const id = findTrackAtTime(csn, t);
+  return id != null ? tracks.get(+id) || tracks.get(id) : null;
+}
+
+// Best-effort position for panel/map when radar, hold, or clamped extrapolation applies.
+function trackPointAt(tk, t){
+  if(!tk?.pts?.length) return null;
+  if(t >= tk.t0 && t <= tk.t1) return interp(tk, t);
+  if(tk.nav && typeof navGroundTimes === 'function'){
+    const gw = navGroundTimes(tk.nav, tk);
+    if(gw && t >= gw.start && t <= gw.end){
+      if(tk.nav.mt === 'ARRIVAL' && t > tk.t1) return interp(tk, tk.t1);
+      if(tk.nav.mt === 'DEPARTURE' && t < tk.t0) return interp(tk, tk.t0);
+    }
+  }
+  return null;
+}
+
 function hdgVel(vx,vy) {
   if(vx===0&&vy===0) return 0;
   return ((Math.atan2(vx,vy)*180/Math.PI)+360)%360;

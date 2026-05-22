@@ -98,12 +98,8 @@
     return typeof parseTaxiTokens === 'function' ? parseTaxiTokens(txt) : [];
   }
 
-  function findTrackObj(csn){
-    const c = csKey(csn);
-    for(const tk of tracks.values()){
-      if(csKey(tk.csn) === c) return tk;
-    }
-    return null;
+  function findTrackObj(csn, t=simT){
+    return findTrackObjAtTime(csn, t);
   }
 
   function navRecForTrack(tk){
@@ -195,7 +191,7 @@
   }
 
   function selectedCsn(){ const tk = selTrk ? tracks.get(selTrk) : null; return csKey(tk && tk.csn); }
-  function findTrack(csn){ const c=csKey(csn); for(const [id,tk] of tracks){ if(csKey(tk.csn)===c) return String(id); } return null; }
+  function findTrack(csn, t=simT){ return findTrackAtTime(csn, t); }
 
   window.shouldUseNavGroundForTrack = function(tk,t){
     if(!tk) return false;
@@ -215,7 +211,6 @@
   window.renderNavGroundLayer = function(t){
     if(typeof ensureNavGroundLayers !== 'function' || !ensureNavGroundLayers()) return;
     const keep = new Set();
-    const selC = selectedCsn();
     let count = 0;
 
     for(const item of currentNavRecords()){
@@ -229,7 +224,8 @@
       const pos = interpolateRoute(route, item.navR, t, tk);
       if(!pos) continue;
       const key = item.key;
-      const sel = selC && selC === csKey(item.csn);
+      const activeId = findTrack(item.csn, t);
+      const sel = selTrk && activeId && String(selTrk) === activeId;
       const clr = item.navR.mt === 'DEPARTURE' ? '#1a88ff' : '#f5a500';
       keep.add(key); count++;
       const hdg = Math.round((pos.hdg||0)/5)*5;
@@ -237,7 +233,7 @@
       if(!navGroundMarkers.has(key)){
         const m = L.marker([pos.lat,pos.lng], {icon:mkIcon(hdg,clr,sel), zIndexOffset:sel?260:120, interactive:true}).bindTooltip(tip,{className:'acft-lbl',offset:[16,0]});
         navGroundMarkerGroup.addLayer(m);
-        m.on('click',()=>{ const id=findTrack(item.csn); if(id) selAircraft(id); });
+        m.on('click',()=>{ const id=findTrack(item.csn, simT); if(id) selAircraft(id); });
         navGroundMarkers.set(key,{marker:m,hdg,selected:sel});
       } else {
         const e = navGroundMarkers.get(key); e.marker.setLatLng([pos.lat,pos.lng]);
