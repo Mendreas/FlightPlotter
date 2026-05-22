@@ -1,9 +1,9 @@
 // NAV-record ground plotting using NAV intermediate event times.
-// Source of truth: NAV LPPT CSV. Tracker/radar is not used for ground movement.
+// Source of truth: NAV LPPT CSV. When NAV ground is active for a callsign, tracker/radar is hidden.
 (function(){
-  if(window.__GROUND_FIX_V9__) return;
-  window.__GROUND_FIX_V9__ = true;
-  console.info('[FlightPlotter] ground_fix.js V9 NAV event-time plotting loaded');
+  if(window.__GROUND_FIX_V10__) return;
+  window.__GROUND_FIX_V10__ = true;
+  console.info('[FlightPlotter] ground_fix.js V10 NAV-only ground loaded');
 
   function clean(v){ return String(v ?? '').trim(); }
   function csKey(v){ return clean(v).toUpperCase(); }
@@ -157,7 +157,16 @@
   }
   function findTrack(csn){ const c = csKey(csn); for(const [id,tk] of tracks){ if(csKey(tk.csn)===c) return String(id); } return null; }
   function selectedCsn(){ const tk = selTrk ? tracks.get(selTrk) : null; return csKey(tk && tk.csn); }
-  window.shouldUseNavGroundForTrack = function(){ return false; };
+  function navActiveForCallsign(csn, t){
+    const d = dateStr(); const key = csKey(csn)+'|'+d;
+    const rec = navMap.get(key);
+    if(!rec) return false;
+    const anchors = timedAnchors(rec);
+    return !!interpAnchors(anchors, t);
+  }
+
+  // Critical: hide tracker/radar marker while a NAV ground record is active.
+  window.shouldUseNavGroundForTrack = function(tk, t){ return !!(tk && navActiveForCallsign(tk.csn, t)); };
 
   window.renderNavGroundLayer = function(t){
     if(typeof ensureNavGroundLayers !== 'function' || !ensureNavGroundLayers()) return;
@@ -185,6 +194,6 @@
     }
     for(const [k,e] of [...navGroundMarkers]) if(!keep.has(k)){ navGroundMarkerGroup.removeLayer(e.marker); navGroundMarkers.delete(k); }
     for(const [k,l] of [...navGroundLines]) if(!keep.has(k)){ navGroundLineGroup.removeLayer(l); navGroundLines.delete(k); }
-    if(window.__lastNavGroundDiagT !== Math.floor(t/30)){ window.__lastNavGroundDiagT = Math.floor(t/30); console.debug('[FlightPlotter] NAV timed-ground active', dateStr(), count); }
+    if(window.__lastNavGroundDiagT !== Math.floor(t/30)){ window.__lastNavGroundDiagT = Math.floor(t/30); console.debug('[FlightPlotter] NAV-only ground active', dateStr(), count); }
   };
 })();
