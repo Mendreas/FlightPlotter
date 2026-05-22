@@ -58,25 +58,45 @@ function trackPointAt(tk, t){
 }
 
 function countVisibleAt(t){
+  const seen = new Set();
   let n = 0;
   for(const tk of tracks.values()){
     if(t < fStart || t > fEnd) continue;
+    const csn = trackCallsignKey(tk.csn);
+    const canonical = findTrackAtTime(csn, t);
+    if(!canonical || canonical !== String(tk.id)) continue;
+    if(seen.has(csn)) continue;
     const phase = trackActiveAt(tk, t);
     if(!phase) continue;
     if(phase === 'ground'){
-      if(typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t)) n++;
+      if(typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t)){
+        seen.add(csn); n++;
+      }
       continue;
     }
     if(typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t)){
-      n++;
+      seen.add(csn); n++;
       continue;
     }
     const p = trackPointAt(tk, t);
     if(!p) continue;
     if(tk.type === 'OVR' && !nearLppt(p.lat, p.lng)) continue;
-    n++;
+    seen.add(csn); n++;
   }
   return n;
+}
+
+function callsignUsesNavGroundAt(csn, t){
+  const id = findTrackAtTime(csn, t);
+  if(!id) return false;
+  const tk = tracks.get(+id) || tracks.get(id);
+  return !!(tk && typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t));
+}
+
+function clearDynamicMapLayers(){
+  for(const id of [...markers.keys()]) removeMarker(id);
+  if(typeof clearOpdiMarkers === 'function') clearOpdiMarkers();
+  if(typeof clearNavGroundLayer === 'function') clearNavGroundLayer();
 }
 
 function hdgVel(vx,vy) {

@@ -25,7 +25,8 @@ function loop(ts) {
     if(simT<=fStart && speed<0){ simT=fStart; stopPlay(); }
 
     if(ts-lastMkUp>50) {   // 20 fps DOM updates
-      for(const id of [...markers.keys()]) removeMarker(id);
+      if(typeof clearDynamicMapLayers === 'function') clearDynamicMapLayers();
+      else for(const id of [...markers.keys()]) removeMarker(id);
       updateMarkers(simT);
       if(opdiVisible || selTrk) renderOpdiLayer(simT);
       else if(typeof clearOpdiMarkers === 'function') clearOpdiMarkers();

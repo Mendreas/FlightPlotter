@@ -2,9 +2,9 @@
 // Ground windows are anchored to radar track boundaries (tk.t0 / tk.t1) so the
 // icon stays visible from stand through climb, and from descent through stand.
 (function(){
-  if(window.__GROUND_FIX_V14__) return;
-  window.__GROUND_FIX_V14__ = true;
-  console.info('[FlightPlotter] ground_fix.js V14 time-scoped visibility loaded');
+  if(window.__GROUND_FIX_V15__) return;
+  window.__GROUND_FIX_V15__ = true;
+  console.info('[FlightPlotter] ground_fix.js V15 deduped layers loaded');
 
   function clean(v){ return String(v ?? '').trim(); }
   function csKey(v){ return clean(v).toUpperCase(); }
@@ -210,36 +210,35 @@
 
   window.renderNavGroundLayer = function(t){
     if(typeof ensureNavGroundLayers !== 'function' || !ensureNavGroundLayers()) return;
-    const keep = new Set();
+    if(typeof clearNavGroundLayer === 'function') clearNavGroundLayer();
+
+    const drawn = new Set();
     let count = 0;
 
     for(const item of currentNavRecords()){
+      const csn = csKey(item.csn);
+      if(drawn.has(csn)) continue;
+
       const tk = findTrackObj(item.csn, t);
       if(!tk || trackActiveAt(tk, t) !== 'ground') continue;
+
       const route = graphRoute(item.navR, tk);
       const pos = interpolateRoute(route, item.navR, t, tk);
       if(!pos) continue;
+
+      drawn.add(csn);
       const key = item.key;
       const activeId = findTrack(item.csn, t);
       const sel = selTrk && activeId && String(selTrk) === activeId;
       const clr = item.navR.mt === 'DEPARTURE' ? '#1a88ff' : '#f5a500';
-      keep.add(key); count++;
+      count++;
       const hdg = Math.round((pos.hdg||0)/5)*5;
       const tip = '<span style="font-weight:700;color:'+clr+'">'+esc(item.csn||'')+'</span><br><span style="font-size:9px;color:#aaa">NAV graph '+(item.navR.mt==='DEPARTURE'?'DEP':'ARR')+' — '+esc(pos.label||'')+'</span>';
-      if(!navGroundMarkers.has(key)){
-        const m = L.marker([pos.lat,pos.lng], {icon:mkIcon(hdg,clr,sel), zIndexOffset:sel?260:120, interactive:true}).bindTooltip(tip,{className:'acft-lbl',offset:[16,0]});
-        navGroundMarkerGroup.addLayer(m);
-        m.on('click',()=>{ const id=findTrack(item.csn, simT); if(id) selAircraft(id); });
-        navGroundMarkers.set(key,{marker:m,hdg,selected:sel});
-      } else {
-        const e = navGroundMarkers.get(key); e.marker.setLatLng([pos.lat,pos.lng]);
-        if(Math.abs(hdg-e.hdg)>4 || sel!==e.selected){ e.marker.setIcon(mkIcon(hdg,clr,sel)); e.marker.options.zIndexOffset=sel?260:120; e.hdg=hdg; e.selected=sel; }
-        e.marker.getTooltip() && e.marker.getTooltip().setContent(tip);
-      }
+      const m = L.marker([pos.lat,pos.lng], {icon:mkIcon(hdg,clr,sel), zIndexOffset:sel?260:120, interactive:true}).bindTooltip(tip,{className:'acft-lbl',offset:[16,0]});
+      navGroundMarkerGroup.addLayer(m);
+      m.on('click',()=>{ const id=findTrack(item.csn, simT); if(id) selAircraft(id); });
+      navGroundMarkers.set(key,{marker:m,hdg,selected:sel});
     }
-
-    for(const [k,e] of [...navGroundMarkers]) if(!keep.has(k)){ navGroundMarkerGroup.removeLayer(e.marker); navGroundMarkers.delete(k); }
-    for(const [k,l] of [...navGroundLines]) if(!keep.has(k)){ navGroundLineGroup.removeLayer(l); navGroundLines.delete(k); }
 
     if(window.__lastNavGroundDiagT !== Math.floor(t/30)){
       window.__lastNavGroundDiagT = Math.floor(t/30);

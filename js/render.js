@@ -36,8 +36,8 @@ function refresh() {
   updTimeDsp(simT);
   document.getElementById('timeSlider').value = simT;
 
-  // Drop every radar icon and rebuild for simT — avoids stale positions after timeline jumps.
-  for(const id of [...markers.keys()]) removeMarker(id);
+  if(typeof clearDynamicMapLayers === 'function') clearDynamicMapLayers();
+  else for(const id of [...markers.keys()]) removeMarker(id);
 
   updateMarkers(simT);
 
@@ -62,6 +62,9 @@ function refresh() {
 function updateMarkers(t) {
   for(const [id, tk] of tracks) {
     if(t < fStart || t > fEnd || !trackActiveAt(tk, t)) { removeMarker(id); continue; }
+
+    const canonical = findTrackAtTime(trackCallsignKey(tk.csn), t);
+    if(canonical !== String(id)) { removeMarker(id); continue; }
 
     if(typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t)) {
       removeMarker(id);

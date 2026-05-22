@@ -224,9 +224,10 @@ function opdiInterpPos(pts, t) {
 function renderOpdiLayer(t) {
   const CLR_GND = {DEP:'#1a88ff', ARR:'#f5a500', OVR:'#a060c0', '':'#606060'};
 
-  // Determine selected aircraft's callsign for always-show logic
   const selCsn = selTrk && tracks.has(selTrk)
     ? (tracks.get(selTrk).csn||'').toUpperCase() : '';
+
+  const opdiMarkerShown = new Set();
 
   for(const [key, seg] of opdiTracks) {
     const {csn, pts} = seg;
@@ -284,17 +285,17 @@ function renderOpdiLayer(t) {
       entry.lastOpacity = targetOpacity;
     }
 
-    // ── Marker ────────────────────────────────────────────────────
-    // Don't show OPDI marker when radar track already has this aircraft at this time
-    // (prevents two aircraft icons for the same flight)
+    // Don't show OPDI marker when radar or NAV ground already shows this aircraft
     let radarHasData = false;
     for(const tk of tracks.values()){
       if((tk.csn||'').toUpperCase()===csn && t>=tk.t0 && t<=tk.t1){
         radarHasData = true; break;
       }
     }
+    const navGroundActive = typeof callsignUsesNavGroundAt === 'function'
+      && callsignUsesNavGroundAt(csn, t);
 
-    if(!inWindow || (radarHasData && !isSelected)){
+    if(!inWindow || (radarHasData && !isSelected) || (navGroundActive && !isSelected) || (opdiMarkerShown.has(csn) && !isSelected)){
       if(opdiMarkers.has(key)){
         const e=opdiMarkers.get(key);
         opdiMarkerGroup.removeLayer(e.marker||e);
@@ -305,6 +306,8 @@ function renderOpdiLayer(t) {
 
     const pos = opdiInterpPos(pts, t);
     if(!pos) continue;
+
+    opdiMarkerShown.add(csn);
 
     // Heading: direction to next known point
     let hdg=0;
