@@ -10,8 +10,7 @@
     built:false,
     nodes:new Map(),
     edges:[],
-    refs:new Map(),
-    tol:6
+    refs:new Map()
   };
 
   function norm(v){
@@ -21,10 +20,14 @@
       .replace(/\s+/g,'');
   }
 
-  function keyOf(lat,lng){
-    // ~1 metre grid. Enough for OSM matching without huge graphs.
-    return Math.round(lat*100000)+'|'+Math.round(lng*100000);
+  function getOsmNetwork(){
+    try {
+      if(typeof LPPT_OSM_NETWORK !== 'undefined') return LPPT_OSM_NETWORK;
+    } catch(e) {}
+    return window.LPPT_OSM_NETWORK || null;
   }
+
+  function keyOf(lat,lng){ return Math.round(lat*100000)+'|'+Math.round(lng*100000); }
 
   function dNM(a,b){
     if(!a || !b) return Infinity;
@@ -34,10 +37,7 @@
   function getNode(lat,lng,label){
     const k = keyOf(lat,lng);
     let n = ROUTER.nodes.get(k);
-    if(!n){
-      n = {id:k, lat, lng, label:label||'', adj:[]};
-      ROUTER.nodes.set(k,n);
-    }
+    if(!n){ n = {id:k, lat, lng, label:label||'', adj:[]}; ROUTER.nodes.set(k,n); }
     return n;
   }
 
@@ -67,9 +67,11 @@
 
   function buildGraph(){
     ROUTER.nodes.clear(); ROUTER.edges.length = 0; ROUTER.refs.clear();
-    const net = window.LPPT_OSM_NETWORK;
-    if(!net || !net.loaded || !Array.isArray(net.taxiways)) return false;
-
+    const net = getOsmNetwork();
+    if(!net || !net.loaded || !Array.isArray(net.taxiways)){
+      console.warn('[FlightPlotter] LPPT taxi graph not built: OSM network unavailable');
+      return false;
+    }
     for(const item of net.taxiways){
       const coords = item.coords || [];
       if(coords.length < 2) continue;
@@ -78,20 +80,15 @@
       for(let i=1;i<coords.length;i++){
         const a = coords[i-1], b = coords[i];
         if(!a || !b) continue;
-        const n1 = getNode(a[0],a[1],ref);
-        const n2 = getNode(b[0],b[1],ref);
-        addEdge(n1,n2,ref);
+        addEdge(getNode(a[0],a[1],ref), getNode(b[0],b[1],ref), ref);
       }
     }
     ROUTER.built = ROUTER.nodes.size > 0;
-    console.info('[FlightPlotter] LPPT taxi graph built', ROUTER.nodes.size, 'nodes', ROUTER.edges.length, 'directed edges', ROUTER.refs.size, 'refs');
+    console.info('[FlightPlotter] LPPT taxi graph built', ROUTER.nodes.size, 'nodes', ROUTER.edges.length, 'directed edges', ROUTER.refs.size, 'refs', [...ROUTER.refs.keys()].slice(0,30).join(','));
     return ROUTER.built;
   }
 
-  function ensureGraph(){
-    if(ROUTER.built) return true;
-    return buildGraph();
-  }
+  function ensureGraph(){ return ROUTER.built || buildGraph(); }
 
   function nearestNodeToCoord(coord){
     if(!coord) return null;
@@ -122,9 +119,8 @@
     if(!startId || !endId) return null;
     if(startId === endId) return [startId];
     const allowed = allowedRefs ? new Set([...allowedRefs].map(norm)) : null;
-    const dist = new Map(), prev = new Map(), done = new Set();
-    dist.set(startId,0);
-    for(let guard=0; guard<3000; guard++){
+    const dist = new Map([[startId,0]]), prev = new Map(), done = new Set();
+    for(let guard=0; guard<5000; guard++){
       let u=null, best=Infinity;
       for(const [id,val] of dist){ if(!done.has(id) && val<best){ best=val; u=id; } }
       if(!u) break;
@@ -135,9 +131,7 @@
       for(const e of node.adj){
         if(allowed && e.ref && !allowed.has(e.ref)) continue;
         const nd = best + e.w;
-        if(nd < (dist.get(e.to) ?? Infinity)){
-          dist.set(e.to,nd); prev.set(e.to,u);
-        }
+        if(nd < (dist.get(e.to) ?? Infinity)){ dist.set(e.to,nd); prev.set(e.to,u); }
       }
     }
     if(!dist.has(endId)) return null;
@@ -149,10 +143,7 @@
 
   function nodesToPoints(ids,label){
     const out=[];
-    for(const id of ids||[]){
-      const n = ROUTER.nodes.get(id);
-      if(n) out.push({lat:n.lat,lng:n.lng,label:label||n.label||'',kind:'graph'});
-    }
+    for(const id of ids||[]){ const n = ROUTER.nodes.get(id); if(n) out.push({lat:n.lat,lng:n.lng,label:label||n.label||'',kind:'graph'}); }
     return out;
   }
 
@@ -168,7 +159,6 @@
     if(!ensureGraph()) return null;
     const toks = (tokens||[]).map(norm).filter(Boolean);
     if(!toks.length) return null;
-
     const out=[];
     let current = startCoord ? nearestNodeToCoord(startCoord) : nearestNodeForRef(toks[0], null);
     if(!current) return null;
@@ -177,27 +167,22 @@
     for(let i=0;i<toks.length;i++){
       const tok = toks[i];
       const nextTok = toks[i+1];
-      let target = null;
-      if(nextTok) target = nearestNodeForRef(nextTok, current);
-      else if(endCoord) target = nearestNodeToCoord(endCoord);
-      else target = nearestNodeForRef(tok, current);
+      let target = nextTok ? nearestNodeForRef(nextTok, current) : (endCoord ? nearestNodeToCoord(endCoord) : nearestNodeForRef(tok, current));
       if(!target) continue;
-
-      // Prefer route through the current and next token refs, but fall back to full graph.
-      const allowed = new Set([tok]);
-      if(nextTok) allowed.add(nextTok);
+      const allowed = new Set([tok]); if(nextTok) allowed.add(nextTok);
       let path = dijkstra(current.id, target.id, allowed);
       if(!path) path = dijkstra(current.id, target.id, null);
       if(path){ appendDedup(out, nodesToPoints(path,tok)); current = target; }
     }
-
     if(endCoord) appendDedup(out,[{lat:endCoord[0],lng:endCoord[1],label:'end',kind:'end'}]);
     return out.length >= 2 ? out : null;
   };
 
-  // Override old OSM route builder with graph-based route. This is still OSM-derived,
-  // but it follows connected graph segments instead of concatenating whole ways.
   window.buildAirfieldRouteFromTokens = function(tokens,startCoord=null,endCoord=null){
     return window.buildLpptTaxiRouteGraph(tokens,startCoord,endCoord);
+  };
+
+  window.lpptTaxiRouterSummary = function(){
+    return {built:ROUTER.built,nodes:ROUTER.nodes.size,edges:ROUTER.edges.length,refs:[...ROUTER.refs.keys()]};
   };
 })();
