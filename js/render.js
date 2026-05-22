@@ -32,6 +32,7 @@ function renderDay() {
   updTimeDsp(simT);
   drawSliderTicks();
   updateMarkers(simT);
+  if(typeof renderNavGroundLayer === 'function') renderNavGroundLayer(simT);
 }
 
 function refresh() {
@@ -40,6 +41,8 @@ function refresh() {
   updateMarkers(simT);
   // Always render OPDI: for zoom-visible layer AND for selected aircraft
   if(opdiVisible || selTrk) renderOpdiLayer(simT);
+  // NAV ground animation keeps ARR/DEP visible on taxiways when radar data ends/has not started.
+  if(typeof renderNavGroundLayer === 'function') renderNavGroundLayer(simT);
   if(selTrk) updPanel();
 }
 

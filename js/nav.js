@@ -145,17 +145,27 @@ function enrichWithNav() {
   updVisibleLabels();
 }
 
-// ── Taxi route visualisation — uses OPDI GPS positions ────────
+// ── Taxi route visualisation — selected aircraft route ────────
 function renderTaxiRoute(tk) {
   clearTaxiRoute();
   if(!tk) return;
 
-  // Try to build route from OPDI ground events (actual GPS positions)
-  // These are far more accurate than hardcoded coordinates
+  // Prefer the NAV taxi route because it contains the planned/operational taxiway sequence
+  // shown in the panel (e.g. U4 U3 U2 U1). If NAV route is not usable, fallback to OPDI GPS.
+  const navPts = navRouteCoords(tk);
+  if(navPts.length >= 2){
+    const clr = tk.type==='DEP' ? '#1a88ff' : '#f5a500';
+    taxiRouteLayer = L.polyline(navPts.map(p=>[p.lat,p.lng]), {
+      color:clr, weight:3, opacity:.85,
+      dashArray:'7,5', interactive:false
+    }).addTo(map);
+    return;
+  }
+
+  // Fallback: build route from OPDI ground events (actual GPS positions)
   const pts = [];
   for(const [,seg] of opdiTracks) {
     if(seg.csn !== (tk.csn||'').toUpperCase()) continue;
-    // Match segment by time overlap with this radar track (±30 min)
     const segMid = (seg.pts[0].t + seg.pts[seg.pts.length-1].t) / 2;
     if(Math.abs(segMid - (tk.t0+tk.t1)/2) > 5400) continue;
     for(const p of seg.pts) {
@@ -165,8 +175,7 @@ function renderTaxiRoute(tk) {
     break;
   }
 
-  if(pts.length < 2) return;  // no OPDI ground data — don't draw
-
+  if(pts.length < 2) return;
   const clr = tk.type==='DEP' ? '#1a88ff' : '#f5a500';
   taxiRouteLayer = L.polyline(pts, {
     color:clr, weight:3, opacity:.80,
@@ -197,6 +206,251 @@ function standCoord(standNum, apron) {
   const offset = ((standN % 10) - 5) * 0.000135;
   return [base[0] + offset * 0.5, base[1] + offset * 0.3];
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// NAV GROUND MOVEMENT ANIMATION
+// Uses NAV LPPT operational fields to animate aircraft on taxiways when
+// radar data is not available: ARR from RWY_VAC/ALDT to AIBT, DEP from
+// AOBT to RWY_ENT/ATOT. Taxiway geometry comes from LPPT_TWY above.
+// ═══════════════════════════════════════════════════════════════
+let navGroundMarkerGroup = null;
+let navGroundLineGroup   = null;
+const navGroundMarkers   = new Map(); // key: track id -> {marker, hdg}
+const navGroundLines     = new Map(); // key: track id -> polyline
+
+function ensureNavGroundLayers(){
+  if(!map) return false;
+  if(!navGroundLineGroup)   navGroundLineGroup   = L.layerGroup().addTo(map);
+  if(!navGroundMarkerGroup) navGroundMarkerGroup = L.layerGroup().addTo(map);
+  return true;
+}
+
+function parseTaxiTokens(route){
+  if(!route) return [];
+  return String(route).toUpperCase()
+    .replace(/[→>]/g,' ')
+    .split(/[^A-Z0-9]+/)
+    .map(x=>x.trim())
+    .filter(Boolean);
+}
+
+function tokenCoord(token){
+  if(!token) return null;
+  const t = String(token).toUpperCase().trim();
+  if(LPPT_TWY[t]) return LPPT_TWY[t];
+  // Common normalisations: RWY20/THR20, RWY 20, HP prefixes etc.
+  const n = t.replace(/^RWY/,'THR').replace(/^HP/,'');
+  if(LPPT_TWY[n]) return LPPT_TWY[n];
+  return null;
+}
+
+function runwayCoord(navR){
+  const r = String(navR?.rwy || '').replace(/[^0-9]/g,'');
+  if(r && LPPT_TWY['THR'+r]) return LPPT_TWY['THR'+r];
+  if(r && RWY?.[r]) return [RWY[r].lat, RWY[r].lng];
+  return null;
+}
+
+function navGroundTimes(navR){
+  if(!navR) return null;
+  let start = null, end = null;
+  if(navR.mt === 'ARRIVAL'){
+    start = hm2s(navR.rwyVac || navR.aldt);
+    end   = hm2s(navR.aibt);
+    if(!isFinite(start)) start = hm2s(navR.aldt);
+    if(!isFinite(end) && isFinite(start)) end = start + 8*60;
+  } else if(navR.mt === 'DEPARTURE'){
+    start = hm2s(navR.aobt);
+    end   = hm2s(navR.rwyEnt || navR.atot);
+    if(!isFinite(end)) end = hm2s(navR.atot);
+    if(!isFinite(end) && isFinite(start)) end = start + 12*60;
+  }
+  if(!isFinite(start) || !isFinite(end) || end <= start) return null;
+  return {start, end};
+}
+
+function navRouteCoords(tk){
+  const navR = tk?.nav;
+  if(!navR) return [];
+
+  const isDep = navR.mt === 'DEPARTURE';
+  const route = isDep ? navR.taxiOut : navR.taxiIn;
+  const tokens = parseTaxiTokens(route);
+  const routePts = [];
+
+  for(const tok of tokens){
+    const c = tokenCoord(tok);
+    if(c) routePts.push({lat:c[0], lng:c[1], label:tok, kind:'twy'});
+  }
+
+  const stand = isDep ? navR.standd : navR.standa;
+  const standP = standCoord(stand, navR.apron) || gatePos(stand, navR.apron);
+  const hpP = tokenCoord(navR.hp);
+  const rwyP = runwayCoord(navR);
+
+  const pts = [];
+  if(isDep){
+    if(standP) pts.push({lat:standP[0], lng:standP[1], label:stand?`Stand ${stand}`:'Stand', kind:'stand'});
+    pts.push(...routePts);
+    if(hpP && !sameCoordLast(pts, hpP)) pts.push({lat:hpP[0], lng:hpP[1], label:navR.hp, kind:'hp'});
+    if(rwyP && !sameCoordLast(pts, rwyP)) pts.push({lat:rwyP[0], lng:rwyP[1], label:'RWY '+(navR.rwy||''), kind:'rwy'});
+  } else {
+    // ARR: start at the first exit/taxiway if route exists; otherwise runway vac/threshold fallback.
+    if(routePts.length) pts.push(...routePts);
+    else if(rwyP) pts.push({lat:rwyP[0], lng:rwyP[1], label:'RWY '+(navR.rwy||''), kind:'rwy'});
+    if(standP) pts.push({lat:standP[0], lng:standP[1], label:stand?`Stand ${stand}`:'Stand', kind:'stand'});
+  }
+  return dedupCoords(pts);
+}
+
+function sameCoordLast(pts, c){
+  if(!pts.length || !c) return false;
+  const p = pts[pts.length-1];
+  return Math.abs(p.lat-c[0]) < 1e-6 && Math.abs(p.lng-c[1]) < 1e-6;
+}
+
+function dedupCoords(pts){
+  const out=[];
+  for(const p of pts){
+    if(!p || !isFinite(p.lat) || !isFinite(p.lng)) continue;
+    const last = out[out.length-1];
+    if(last && Math.abs(last.lat-p.lat)<1e-6 && Math.abs(last.lng-p.lng)<1e-6) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+function pathLengths(pts){
+  const seg=[0]; let total=0;
+  for(let i=1;i<pts.length;i++){
+    total += Math.max(0.001, distNM(pts[i-1].lat, pts[i-1].lng, pts[i].lat, pts[i].lng));
+    seg.push(total);
+  }
+  return {seg,total};
+}
+
+function interpPath(pts, frac){
+  if(!pts.length) return null;
+  if(pts.length===1) return {lat:pts[0].lat,lng:pts[0].lng,hdg:0,label:pts[0].label};
+  frac = Math.max(0, Math.min(1, frac));
+  const {seg,total} = pathLengths(pts);
+  const d = frac * total;
+  let i=1;
+  while(i<seg.length-1 && seg[i] < d) i++;
+  const d0=seg[i-1], d1=seg[i];
+  const a = d1>d0 ? (d-d0)/(d1-d0) : 0;
+  const p0=pts[i-1], p1=pts[i];
+  const lat = p0.lat + a*(p1.lat-p0.lat);
+  const lng = p0.lng + a*(p1.lng-p0.lng);
+  const hdg = ((Math.atan2(p1.lng-p0.lng, p1.lat-p0.lat)*180/Math.PI)+360)%360;
+  return {lat,lng,hdg,label:p1.label||p0.label||''};
+}
+
+function radarHasTrackAt(tk, t){
+  return tk && t >= tk.t0 && t <= tk.t1;
+}
+
+function hasActiveOpdiGround(csn, t){
+  csn = String(csn||'').toUpperCase();
+  if(!csn) return false;
+  for(const [,seg] of opdiTracks){
+    if(seg.csn !== csn || !seg.pts?.length) continue;
+    const a = seg.pts[0].t, b = seg.pts[seg.pts.length-1].t;
+    if(t >= a-30 && t <= b+30) return true;
+  }
+  return false;
+}
+
+function renderNavGroundLayer(t){
+  if(!ensureNavGroundLayers()) return;
+  const keep = new Set();
+  const zOk = map.getZoom() >= OPDI_ZOOM;
+
+  for(const [id, tk] of tracks){
+    const navR = tk.nav;
+    if(!navR) continue;
+    const times = navGroundTimes(navR);
+    if(!times || t < times.start || t > times.end) continue;
+
+    // Show all ground aircraft in AD zoom. Always show the selected one.
+    const selected = id === selTrk;
+    if(!zOk && !selected) continue;
+
+    // If radar is already showing the aircraft, do not duplicate it.
+    if(radarHasTrackAt(tk, t)) continue;
+
+    // If an actual OPDI marker is active, prefer OPDI over synthetic NAV.
+    if(hasActiveOpdiGround(tk.csn, t)) continue;
+
+    const pts = navRouteCoords(tk);
+    if(pts.length < 2) continue;
+
+    const frac = (t - times.start) / (times.end - times.start);
+    const pos = interpPath(pts, frac);
+    if(!pos) continue;
+
+    const clr = navR.mt==='DEPARTURE' ? '#1a88ff' : '#f5a500';
+    const key = String(id);
+    keep.add(key);
+
+    // Route line, lightly visible for selected aircraft only.
+    if(selected && !navGroundLines.has(key)){
+      const line = L.polyline(pts.map(p=>[p.lat,p.lng]), {
+        color: clr, weight: 3, opacity: .78, dashArray:'7,5', interactive:false
+      });
+      navGroundLineGroup.addLayer(line);
+      navGroundLines.set(key, line);
+    } else if(!selected && navGroundLines.has(key)){
+      navGroundLineGroup.removeLayer(navGroundLines.get(key));
+      navGroundLines.delete(key);
+    }
+
+    const hdgRnd = Math.round(pos.hdg/5)*5;
+    const tip = `<span style="font-weight:700;color:${clr}">${esc(tk.csn||'')}</span><br>`+
+      `<span style="font-size:9px;color:#aaa">NAV ${esc(navR.mt==='DEPARTURE'?'taxi-out':'taxi-in')} — ${esc(pos.label||'')}</span>`;
+
+    if(!navGroundMarkers.has(key)){
+      const m = L.marker([pos.lat,pos.lng], {
+        icon: mkIcon(hdgRnd, clr, selected), zIndexOffset: selected?220:60, interactive:true
+      }).bindTooltip(tip,{className:'acft-lbl',offset:[16,0]});
+      navGroundMarkerGroup.addLayer(m);
+      m.on('click',()=>selAircraft(id));
+      navGroundMarkers.set(key,{marker:m, hdg:hdgRnd, selected});
+    } else {
+      const e = navGroundMarkers.get(key);
+      e.marker.setLatLng([pos.lat,pos.lng]);
+      if(Math.abs(hdgRnd-e.hdg)>4 || selected!==e.selected){
+        e.marker.setIcon(mkIcon(hdgRnd, clr, selected));
+        e.marker.options.zIndexOffset = selected?220:60;
+        e.hdg = hdgRnd; e.selected = selected;
+      }
+      e.marker.getTooltip()?.setContent(tip);
+    }
+  }
+
+  for(const [key,e] of [...navGroundMarkers]){
+    if(!keep.has(key)){
+      navGroundMarkerGroup.removeLayer(e.marker);
+      navGroundMarkers.delete(key);
+    }
+  }
+  for(const [key,line] of [...navGroundLines]){
+    if(!keep.has(key)){
+      navGroundLineGroup.removeLayer(line);
+      navGroundLines.delete(key);
+    }
+  }
+}
+
+function clearNavGroundLayer(){
+  if(navGroundMarkerGroup) navGroundMarkerGroup.clearLayers();
+  if(navGroundLineGroup) navGroundLineGroup.clearLayers();
+  navGroundMarkers.clear();
+  navGroundLines.clear();
+}
+
+
 async function loadNMIR(file, dk) {
   nmirMap.clear();
   try {

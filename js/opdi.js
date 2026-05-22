@@ -294,7 +294,7 @@ function renderOpdiLayer(t) {
       }
     }
 
-    if(!inWindow || radarHasData){
+    if(!inWindow || (radarHasData && !isSelected)){
       if(opdiMarkers.has(key)){
         const e=opdiMarkers.get(key);
         opdiMarkerGroup.removeLayer(e.marker||e);
