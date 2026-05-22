@@ -2,8 +2,9 @@
 // NAV CSV — LPPT operational data
 // ═══════════════════════════════════════════════════════════════
 
-// ── Taxiway coordinate database (LPPT AIP AD 2.24.02, 2022-2023) ──
-// Each entry = approximate centroid/intersection [lat, lng]
+// ── Taxiway fallback coordinate database ──
+// Used only when the OpenStreetMap taxiway network is not available.
+// The preferred source is js/lppt_airfield_network.js, loaded via Overpass.
 const LPPT_TWY = {
   // Holding Points / Runway Entry
   'M5': [38.7952,-9.1307], 'N2': [38.7962,-9.1295],
@@ -176,8 +177,13 @@ function clearTaxiRoute() {
 }
 
 function standCoord(standNum, apron) {
-  // Approximate stand positions based on apron number
-  // Stand ranges per apron from AIP charts
+  // Preferred: real OSM parking_position when available.
+  if(typeof airfieldStandCoord === 'function') {
+    const osm = airfieldStandCoord(standNum);
+    if(osm) return osm;
+  }
+
+  // Fallback: approximate stand positions based on apron number.
   const apronNum = parseInt(apron)||0;
   const standN   = parseInt(standNum)||0;
   const apronCenters = {
@@ -187,13 +193,12 @@ function standCoord(standNum, apron) {
     42:[38.7788,-9.1395], 50:[38.7800,-9.1390], 60:[38.7825,-9.1378],
     70:[38.7872,-9.1368], 80:[38.7892,-9.1352],
   };
-  // Use small offsets per stand within apron
   const base = apronCenters[apronNum];
   if(!base) return null;
-  // Spread stands ~15m apart within apron
   const offset = ((standN % 10) - 5) * 0.000135;
   return [base[0] + offset * 0.5, base[1] + offset * 0.3];
 }
+
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -298,33 +303,46 @@ function navRouteCoords(tk){
   const isDep = navR.mt === 'DEPARTURE';
   const route = isDep ? navR.taxiOut : navR.taxiIn;
   const tokens = parseTaxiTokens(route);
-  const routePts = [];
+  const stand = isDep ? navR.standd : navR.standa;
+  const standP = standCoord(stand, navR.apron) || gatePos(stand, navR.apron);
 
+  // Use real radar transition points for the airborne/ground handoff.
+  const fp = firstTrackPoint(tk);
+  const lp = lastTrackPoint(tk);
+  const hpP = tokenCoord(navR.hp);
+  const rwyP = runwayCoord(navR);
+
+  if(isDep){
+    const startCoord = standP || null;
+    const endCoord = fp ? [fp.lat, fp.lng] : (hpP || rwyP || null);
+    if(typeof buildAirfieldRouteFromTokens === 'function') {
+      const osmPath = buildAirfieldRouteFromTokens(tokens, startCoord, endCoord);
+      if(osmPath && osmPath.length >= 2) return dedupCoords(osmPath);
+    }
+  } else {
+    const startCoord = lp ? [lp.lat, lp.lng] : (rwyP || null);
+    const endCoord = standP || null;
+    if(typeof buildAirfieldRouteFromTokens === 'function') {
+      const osmPath = buildAirfieldRouteFromTokens(tokens, startCoord, endCoord);
+      if(osmPath && osmPath.length >= 2) return dedupCoords(osmPath);
+    }
+  }
+
+  // Fallback if OSM network is unavailable: old token-centroid method.
+  const routePts = [];
   for(const tok of tokens){
     const c = tokenCoord(tok);
     if(c) routePts.push({lat:c[0], lng:c[1], label:tok, kind:'twy'});
   }
-
-  const stand = isDep ? navR.standd : navR.standa;
-  const standP = standCoord(stand, navR.apron) || gatePos(stand, navR.apron);
-  const hpP = tokenCoord(navR.hp);
-  const rwyP = runwayCoord(navR);
 
   const pts = [];
   if(isDep){
     if(standP) pts.push({lat:standP[0], lng:standP[1], label:stand?`Stand ${stand}`:'Stand', kind:'stand'});
     pts.push(...routePts);
     if(hpP && !sameCoordLast(pts, hpP)) pts.push({lat:hpP[0], lng:hpP[1], label:navR.hp, kind:'hp'});
-
-    // Use the first radar point as the final transition if available. It gives
-    // a smoother handoff to the real track than a rough runway threshold point.
-    const fp = firstTrackPoint(tk);
     if(fp && !sameCoordLast(pts, [fp.lat, fp.lng])) pts.push(fp);
     else if(rwyP && !sameCoordLast(pts, rwyP)) pts.push({lat:rwyP[0], lng:rwyP[1], label:'RWY '+(navR.rwy||''), kind:'rwy'});
   } else {
-    // ARR: start from the last real radar point if possible. This preserves the
-    // visible aircraft at touchdown/rollout and then moves it towards TAXI_IN.
-    const lp = lastTrackPoint(tk);
     if(lp) pts.push(lp);
     else if(rwyP) pts.push({lat:rwyP[0], lng:rwyP[1], label:'RWY '+(navR.rwy||''), kind:'rwy'});
     pts.push(...routePts);
@@ -332,6 +350,7 @@ function navRouteCoords(tk){
   }
   return dedupCoords(pts);
 }
+
 
 function sameCoordLast(pts, c){
   if(!pts.length || !c) return false;
@@ -438,7 +457,7 @@ function renderNavGroundLayer(t){
 
     const hdgRnd = Math.round(pos.hdg/5)*5;
     const tip = `<span style="font-weight:700;color:${clr}">${esc(tk.csn||'')}</span><br>`+
-      `<span style="font-size:9px;color:#aaa">NAV ${esc(navR.mt==='DEPARTURE'?'taxi-out':'taxi-in')} — ${esc(pos.label||'')}</span>`;
+      `<span style="font-size:9px;color:#aaa">NAV/OSM ${esc(navR.mt==='DEPARTURE'?'taxi-out':'taxi-in')} — ${esc(pos.label||'')}</span>`;
 
     if(!navGroundMarkers.has(key)){
       const m = L.marker([pos.lat,pos.lng], {

@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 const APP_CONFIG = {
-  version: '5.1 NAV-safe map-enhanced',
+  version: '5.5 OSM taxi-network',
 
   airport: {
     icao: 'LPPT',
@@ -120,7 +120,7 @@ function enableExternalBaseMap(){
   _baseTileLayer = L.tileLayer(APP_CONFIG.map.tileLayerUrl, APP_CONFIG.map.tileLayerOptions || {});
   _baseTileLayer.addTo(map);
   try { _baseTileLayer.bringToBack(); } catch(e) {}
-  appLog?.('info', 'Mapa base externo ativado pelo utilizador.');
+  appLog?.('info', 'Mapa base externo ativado por defeito.');
 }
 function disableExternalBaseMap(){
   if(map && _baseTileLayer){
