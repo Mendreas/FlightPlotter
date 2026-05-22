@@ -130,7 +130,7 @@ function enrichWithNav() {
     const csn = (tk.csn||'').toUpperCase();
     if(!csn) continue;
     const rec = navMap.get(`${csn}|${dateStr}`);
-    if(!rec || (rec.mt === 'DEPARTURE' && tk.type !== 'DEP') || (rec.mt === 'ARRIVAL' && tk.type !== 'ARR')) {
+    if(!rec || !navTimeMatchesTrack(rec, tk)) {
       delete tk.nav;
       continue;
     }

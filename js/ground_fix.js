@@ -2,9 +2,9 @@
 // Ground windows are anchored to radar track boundaries (tk.t0 / tk.t1) so the
 // icon stays visible from stand through climb, and from descent through stand.
 (function(){
-  if(window.__GROUND_FIX_V17__) return;
-  window.__GROUND_FIX_V17__ = true;
-  console.info('[FlightPlotter] ground_fix.js V17 selection fix loaded');
+  if(window.__GROUND_FIX_V18__) return;
+  window.__GROUND_FIX_V18__ = true;
+  console.info('[FlightPlotter] ground_fix.js V18 NAV time window loaded');
 
   function clean(v){ return String(v ?? '').trim(); }
   function csKey(v){ return clean(v).toUpperCase(); }
@@ -128,7 +128,10 @@
       const ent = tsec(navR.rwyEnt);
       const atot = tsec(navR.atot);
       start = aobt ?? (trackStart != null ? trackStart - 12*60 : null);
-      end = trackStart ?? ent ?? atot ?? (start != null ? start + 12*60 : null);
+      // End at the earliest operational lift-off — never stretch taxi until a
+      // later radar segment of the same callsign (multi-leg day).
+      const endCandidates = [trackStart, ent, atot].filter(v => Number.isFinite(v));
+      end = endCandidates.length ? Math.min(...endCandidates) : (start != null ? start + 12*60 : null);
     }
 
     return Number.isFinite(start) && Number.isFinite(end) && end > start
@@ -197,6 +200,7 @@
     if(!tk) return false;
     const navR = navRecForTrack(tk);
     if(!navR) return false;
+    if(typeof navTimeMatchesTrack === 'function' && !navTimeMatchesTrack(navR, tk)) return false;
     if(typeof navMatchesTrack === 'function' && !navMatchesTrack(navR, tk)) return false;
 
     // Never replace a live radar point — ground fills the gaps only.

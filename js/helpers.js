@@ -38,13 +38,36 @@ function navMatchesTrack(navR, tk){
   return false;
 }
 
+// Pair NAV movement with the radar segment whose times actually overlap.
+// Same callsign twice/day otherwise links morning AOBT to an evening track
+// and keeps a ghost icon visible for hours (e.g. TAP1920 at 07h shown at 14h).
+function navTimeMatchesTrack(navR, tk){
+  if(!navR || !tk) return false;
+  if(!navMatchesTrack(navR, tk)) return false;
+  const aobt = hm2s(navR.aobt);
+  const aldt = hm2s(navR.aldt);
+  const aibt = hm2s(navR.aibt);
+  if(navR.mt === 'DEPARTURE'){
+    if(Number.isFinite(aobt) && Number.isFinite(tk.t0)){
+      const gap = tk.t0 - aobt;
+      if(gap < -5 * 60 || gap > 3 * 3600) return false;
+    }
+  }
+  if(navR.mt === 'ARRIVAL'){
+    const anchor = Number.isFinite(tk.t1) ? tk.t1 : aldt;
+    if(Number.isFinite(aldt) && Number.isFinite(anchor) && Math.abs(anchor - aldt) > 3 * 3600) return false;
+    if(Number.isFinite(aibt) && Number.isFinite(anchor) && aibt < anchor - 60) return false;
+  }
+  return true;
+}
+
 // Radar or NAV-ground phase active at simulation time t (null = hide).
 function trackActiveAt(tk, t){
   if(!tk?.pts?.length) return null;
   if(t >= tk.t0 && t <= tk.t1) return 'radar';
   const navR = tk.nav;
   if(!navR || typeof navGroundTimes !== 'function') return null;
-  if(!navMatchesTrack(navR, tk)) return null;
+  if(!navTimeMatchesTrack(navR, tk)) return null;
   const gw = navGroundTimes(navR, tk);
   if(!gw || t < gw.start || t > gw.end) return null;
   if(navR.mt === 'ARRIVAL' && t > tk.t1) return 'ground';
