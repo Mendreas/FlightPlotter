@@ -2,7 +2,8 @@
 // AIRCRAFT SELECTION & PANEL
 // ═══════════════════════════════════════════════════════════════
 function selAircraft(id) {
-  const tk = tracks.get(id);
+  id = normalizeTrackId(id);
+  const tk = trackById(id);
   if(!tk || !trackActiveAt(tk, simT)) return;
   selTrk = id;
   updPanel();
@@ -30,7 +31,7 @@ function clearSelectionPanel() {
 
 function updPanel() {
   if(!selTrk) return;
-  const tk   = tracks.get(selTrk);
+  const tk   = trackById(selTrk);
   if(!tk || !trackActiveAt(tk, simT)) return;
   const p    = trackPointAt(tk, simT) || interp(tk, Math.max(tk.t0, Math.min(simT, tk.t1)));
   if(!p) return;

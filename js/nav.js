@@ -131,6 +131,8 @@ function enrichWithNav() {
     if(!csn) continue;
     const rec = navMap.get(`${csn}|${dateStr}`);
     if(!rec) continue;
+    if(rec.mt === 'DEPARTURE' && tk.type !== 'DEP') continue;
+    if(rec.mt === 'ARRIVAL' && tk.type !== 'ARR') continue;
     tk.nav = rec;
     // Authoritative ADEP/ADES from operational data
     if(rec.mt==='DEPARTURE' && rec.ades) tk.ades = rec.ades;

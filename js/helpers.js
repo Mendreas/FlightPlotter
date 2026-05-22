@@ -18,12 +18,33 @@ function interp(tk,t) {
 
 function trackCallsignKey(v){ return String(v ?? '').trim().toUpperCase(); }
 
+function trackById(id){
+  if(id == null || id === '') return null;
+  const n = +id;
+  return tracks.get(Number.isFinite(n) ? n : id) || null;
+}
+
+function normalizeTrackId(id){
+  const n = +id;
+  return Number.isFinite(n) ? n : id;
+}
+
+// NAV movement type must match radar classification — otherwise an OVR
+// overflight inherits ARR/DEP taxi windows and leaves ghost icons on the apron.
+function navMatchesTrack(navR, tk){
+  if(!navR || !tk) return false;
+  if(navR.mt === 'ARRIVAL') return tk.type === 'ARR';
+  if(navR.mt === 'DEPARTURE') return tk.type === 'DEP';
+  return false;
+}
+
 // Radar or NAV-ground phase active at simulation time t (null = hide).
 function trackActiveAt(tk, t){
   if(!tk?.pts?.length) return null;
   if(t >= tk.t0 && t <= tk.t1) return 'radar';
   const navR = tk.nav;
   if(!navR || typeof navGroundTimes !== 'function') return null;
+  if(!navMatchesTrack(navR, tk)) return null;
   const gw = navGroundTimes(navR, tk);
   if(!gw || t < gw.start || t > gw.end) return null;
   if(navR.mt === 'ARRIVAL' && t > tk.t1) return 'ground';
@@ -48,7 +69,7 @@ function findTrackAtTime(csn, t){
 
 function findTrackObjAtTime(csn, t){
   const id = findTrackAtTime(csn, t);
-  return id != null ? tracks.get(+id) || tracks.get(id) : null;
+  return id != null ? trackById(id) : null;
 }
 
 // Radar position only — ground gaps are drawn by the NAV/OPDI layers.
@@ -89,7 +110,7 @@ function countVisibleAt(t){
 function callsignUsesNavGroundAt(csn, t){
   const id = findTrackAtTime(csn, t);
   if(!id) return false;
-  const tk = tracks.get(+id) || tracks.get(id);
+  const tk = trackById(id);
   return !!(tk && typeof shouldUseNavGroundForTrack === 'function' && shouldUseNavGroundForTrack(tk, t));
 }
 

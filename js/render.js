@@ -50,7 +50,7 @@ function refresh() {
   if(typeof renderNavGroundLayer === 'function') renderNavGroundLayer(simT);
 
   if(selTrk){
-    const tk = tracks.get(selTrk);
+    const tk = trackById(selTrk);
     if(!tk || !trackActiveAt(tk, simT)) clearSelectionPanel();
     else updPanel();
   }
@@ -146,45 +146,6 @@ function updLabel(id, tk, p) {
 // SELECTED-AIRCRAFT GROUND HANDOFF
 // ═══════════════════════════════════════════════════════════════
 (function installSelectedGroundHandoff(){
-  function finiteTime(v){
-    const n = hm2s(v);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  // Replacement for navGroundTimes():
-  // ARR: keep radar until the last radar point, then taxi to stand.
-  // DEP: taxi from stand until the first radar point, then keep radar.
-  window.navGroundTimes = function selectedGroundTimes(navR, tk=null){
-    if(!navR) return null;
-    let start = null;
-    let end = null;
-
-    if(navR.mt === 'ARRIVAL'){
-      const trackEnd = tk && Number.isFinite(tk.t1) ? tk.t1 : null;
-      const vac = finiteTime(navR.rwyVac);
-      const aldt = finiteTime(navR.aldt);
-      const aibt = finiteTime(navR.aibt);
-
-      // Do NOT start at ALDT while there is still radar in final/runway.
-      start = trackEnd ?? vac ?? aldt;
-      end = aibt ?? (start != null ? start + 8*60 : null);
-    } else if(navR.mt === 'DEPARTURE'){
-      const trackStart = tk && Number.isFinite(tk.t0) ? tk.t0 : null;
-      const aobt = finiteTime(navR.aobt);
-      const ent = finiteTime(navR.rwyEnt);
-      const atot = finiteTime(navR.atot);
-
-      start = aobt ?? (trackStart != null ? trackStart - 12*60 : null);
-      // End before/at first radar point. Never extend taxi animation into live radar.
-      end = trackStart ?? ent ?? atot ?? (start != null ? start + 12*60 : null);
-    }
-
-    if(!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
-    return {start, end};
-  };
-  // Also replace the plain global binding used by non-module scripts.
-  try { navGroundTimes = window.navGroundTimes; } catch(e) {}
-
   const originalOpdiRenderer = window.renderOpdiLayer;
   if(typeof originalOpdiRenderer === 'function'){
     window.renderOpdiLayer = function opdiLayerWithSelection(t){
@@ -198,97 +159,4 @@ function updLabel(id, tk, p) {
       finally { opdiVisible = oldVisible; }
     };
   }
-
-  window.renderNavGroundLayer = function selectedOnlyNavGroundLayer(t){
-    if(typeof ensureNavGroundLayers !== 'function' || !ensureNavGroundLayers()) return;
-    const keep = new Set();
-
-    if(!selTrk){
-      for(const [key,e] of [...navGroundMarkers]){
-        navGroundMarkerGroup.removeLayer(e.marker);
-        navGroundMarkers.delete(key);
-      }
-      for(const [key,line] of [...navGroundLines]){
-        navGroundLineGroup.removeLayer(line);
-        navGroundLines.delete(key);
-      }
-      return;
-    }
-
-    const tk = tracks.get(selTrk);
-    const navR = tk?.nav;
-    if(navR){
-      const times = window.navGroundTimes(navR, tk);
-      if(times && t >= times.start && t <= times.end){
-        const pts = navRouteCoords(tk);
-        if(pts.length >= 2){
-          const frac = (t - times.start) / (times.end - times.start);
-          const pos = interpPath(pts, frac);
-          if(pos){
-            const clr = navR.mt === 'DEPARTURE' ? '#1a88ff' : '#f5a500';
-            const key = String(selTrk);
-            keep.add(key);
-
-            if(!navGroundLines.has(key)){
-              const line = L.polyline(pts.map(p => [p.lat, p.lng]), {
-                color: clr, weight: 3, opacity: .78, dashArray:'7,5', interactive:false
-              });
-              navGroundLineGroup.addLayer(line);
-              navGroundLines.set(key, line);
-            }
-
-            const hdgRnd = Math.round(pos.hdg / 5) * 5;
-            const tip = `<span style="font-weight:700;color:${clr}">${esc(tk.csn||'')}</span><br>`+
-              `<span style="font-size:9px;color:#aaa">NAV/OSM ${esc(navR.mt==='DEPARTURE'?'taxi-out':'taxi-in')} — ${esc(pos.label||'')}</span>`;
-
-            if(!navGroundMarkers.has(key)){
-              const m = L.marker([pos.lat, pos.lng], {
-                icon: mkIcon(hdgRnd, clr, true), zIndexOffset: 260, interactive:true
-              }).bindTooltip(tip, {className:'acft-lbl', offset:[16,0]});
-              navGroundMarkerGroup.addLayer(m);
-              m.on('click', () => selAircraft(selTrk));
-              navGroundMarkers.set(key, {marker:m, hdg:hdgRnd, selected:true});
-            } else {
-              const e = navGroundMarkers.get(key);
-              e.marker.setLatLng([pos.lat, pos.lng]);
-              if(Math.abs(hdgRnd - e.hdg) > 4 || !e.selected){
-                e.marker.setIcon(mkIcon(hdgRnd, clr, true));
-                e.marker.options.zIndexOffset = 260;
-                e.hdg = hdgRnd;
-                e.selected = true;
-              }
-              e.marker.getTooltip()?.setContent(tip);
-            }
-          }
-        }
-      }
-    }
-
-    for(const [key,e] of [...navGroundMarkers]){
-      if(!keep.has(key)){
-        navGroundMarkerGroup.removeLayer(e.marker);
-        navGroundMarkers.delete(key);
-      }
-    }
-    for(const [key,line] of [...navGroundLines]){
-      if(!keep.has(key)){
-        navGroundLineGroup.removeLayer(line);
-        navGroundLines.delete(key);
-      }
-    }
-  };
-
-  window.shouldUseNavGroundForTrack = function selectedOnlyShouldUseNavGround(tk, t){
-    if(!selTrk || tracks.get(selTrk) !== tk) return false;
-    if(!tk?.nav) return false;
-
-    // Critical handoff guards: never replace an existing radar point.
-    if(tk.nav.mt === 'ARRIVAL' && Number.isFinite(tk.t1) && t <= tk.t1) return false;
-    if(tk.nav.mt === 'DEPARTURE' && Number.isFinite(tk.t0) && t >= tk.t0) return false;
-
-    const times = window.navGroundTimes(tk.nav, tk);
-    if(!times || t < times.start || t > times.end) return false;
-    const pts = navRouteCoords(tk);
-    return pts.length >= 2;
-  };
 })();

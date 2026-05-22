@@ -2,9 +2,9 @@
 // Ground windows are anchored to radar track boundaries (tk.t0 / tk.t1) so the
 // icon stays visible from stand through climb, and from descent through stand.
 (function(){
-  if(window.__GROUND_FIX_V15__) return;
-  window.__GROUND_FIX_V15__ = true;
-  console.info('[FlightPlotter] ground_fix.js V15 deduped layers loaded');
+  if(window.__GROUND_FIX_V16__) return;
+  window.__GROUND_FIX_V16__ = true;
+  console.info('[FlightPlotter] ground_fix.js V16 NAV/type match loaded');
 
   function clean(v){ return String(v ?? '').trim(); }
   function csKey(v){ return clean(v).toUpperCase(); }
@@ -197,6 +197,7 @@
     if(!tk) return false;
     const navR = navRecForTrack(tk);
     if(!navR) return false;
+    if(typeof navMatchesTrack === 'function' && !navMatchesTrack(navR, tk)) return false;
 
     // Never replace a live radar point — ground fills the gaps only.
     if(navR.mt === 'ARRIVAL' && Number.isFinite(tk.t1) && t <= tk.t1) return false;
@@ -221,6 +222,8 @@
 
       const tk = findTrackObj(item.csn, t);
       if(!tk || trackActiveAt(tk, t) !== 'ground') continue;
+      if(item.navR.mt === 'ARRIVAL' && tk.type !== 'ARR') continue;
+      if(item.navR.mt === 'DEPARTURE' && tk.type !== 'DEP') continue;
 
       const route = graphRoute(item.navR, tk);
       const pos = interpolateRoute(route, item.navR, t, tk);
@@ -236,7 +239,7 @@
       const tip = '<span style="font-weight:700;color:'+clr+'">'+esc(item.csn||'')+'</span><br><span style="font-size:9px;color:#aaa">NAV graph '+(item.navR.mt==='DEPARTURE'?'DEP':'ARR')+' — '+esc(pos.label||'')+'</span>';
       const m = L.marker([pos.lat,pos.lng], {icon:mkIcon(hdg,clr,sel), zIndexOffset:sel?260:120, interactive:true}).bindTooltip(tip,{className:'acft-lbl',offset:[16,0]});
       navGroundMarkerGroup.addLayer(m);
-      m.on('click',()=>{ const id=findTrack(item.csn, simT); if(id) selAircraft(id); });
+      m.on('click',()=>{ const id=findTrack(item.csn, simT); if(id != null) selAircraft(id); });
       navGroundMarkers.set(key,{marker:m,hdg,selected:sel});
     }
 
