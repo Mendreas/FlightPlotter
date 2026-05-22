@@ -1,8 +1,13 @@
 // Ground continuity override for selected aircraft.
 // Loaded after render.js. Keeps selected ARR/DEP visible after/before radar.
 (function(){
+  if(window.__GROUND_FIX_V2__) return;
+  window.__GROUND_FIX_V2__ = true;
+  console.info('[FlightPlotter] ground_fix.js V2 loaded');
+
   function tsec(v){ const n = hm2s(v); return Number.isFinite(n) ? n : null; }
   function pnt(p,label){ return p && Number.isFinite(p.lat) && Number.isFinite(p.lng) ? {lat:p.lat,lng:p.lng,label:label||'',kind:'radar'} : null; }
+
   function standPoint(navR){
     const dep = navR && navR.mt === 'DEPARTURE';
     const st = dep ? navR.standd : navR.standa;
@@ -11,29 +16,53 @@
     try { if(!p && typeof gatePos === 'function') p = gatePos(st, navR.apron); } catch(e) {}
     return p && Number.isFinite(p[0]) && Number.isFinite(p[1]) ? {lat:p[0],lng:p[1],label:st ? 'Stand '+st : 'Stand',kind:'stand'} : null;
   }
+
+  function addTaxiTokens(out, txt){
+    const tokens = typeof parseTaxiTokens === 'function' ? parseTaxiTokens(txt) : [];
+    tokens.forEach(tok=>{
+      try {
+        const c = tokenCoord(tok);
+        if(c && Number.isFinite(c[0]) && Number.isFinite(c[1])) out.push({lat:c[0],lng:c[1],label:tok,kind:'twy'});
+      } catch(e) {}
+    });
+  }
+
+  function duplicatePoint(p, label){
+    return p ? {lat:p.lat, lng:p.lng, label:label || p.label || 'hold', kind:'hold'} : null;
+  }
+
   function routeFallback(tk){
     const navR = tk && tk.nav;
     if(!navR) return [];
+
     let pts = [];
     try { if(typeof navRouteCoords === 'function') pts = navRouteCoords(tk) || []; } catch(e) { pts = []; }
     if(pts.length >= 2) return pts;
-    const first = pnt(tk.pts && tk.pts[0], 'radar start');
-    const last = pnt(tk.pts && tk.pts[tk.pts.length-1], 'radar end');
+
+    const first = pnt(tk.pts && tk.pts[0], 'first radar');
+    const last = pnt(tk.pts && tk.pts[tk.pts.length-1], 'last radar');
     const stand = standPoint(navR);
     const out = [];
-    const tokens = typeof parseTaxiTokens === 'function' ? parseTaxiTokens(navR.mt === 'DEPARTURE' ? navR.taxiOut : navR.taxiIn) : [];
+
     if(navR.mt === 'DEPARTURE'){
       if(stand) out.push(stand);
-      tokens.forEach(tok=>{ try { const c = tokenCoord(tok); if(c) out.push({lat:c[0],lng:c[1],label:tok,kind:'twy'}); } catch(e){} });
+      addTaxiTokens(out, navR.taxiOut);
       if(first) out.push(first);
+      if(out.length === 0 && first) out.push(first, duplicatePoint(first, 'first radar hold'));
+      if(out.length === 1) out.push(duplicatePoint(out[0], 'hold'));
     } else {
       if(last) out.push(last);
-      tokens.forEach(tok=>{ try { const c = tokenCoord(tok); if(c) out.push({lat:c[0],lng:c[1],label:tok,kind:'twy'}); } catch(e){} });
+      addTaxiTokens(out, navR.taxiIn);
       if(stand) out.push(stand);
+      // Absolute minimum continuity: after radar ends, keep selected aircraft
+      // visible at the last radar point even if no taxi geometry/stand can be resolved.
+      if(out.length === 0 && last) out.push(last, duplicatePoint(last, 'last radar hold'));
+      if(out.length === 1) out.push(duplicatePoint(out[0], 'hold'));
     }
-    if(out.length === 1) out.push({lat:out[0].lat,lng:out[0].lng,label:out[0].label,kind:'hold'});
+
     try { return typeof dedupCoords === 'function' ? dedupCoords(out) : out; } catch(e) { return out; }
   }
+
   window.navGroundTimes = function(navR, tk){
     if(!navR) return null;
     let s=null, e=null;
@@ -47,6 +76,7 @@
     return Number.isFinite(s) && Number.isFinite(e) && e > s ? {start:s,end:e} : null;
   };
   try { navGroundTimes = window.navGroundTimes; } catch(e) {}
+
   window.shouldUseNavGroundForTrack = function(tk,t){
     if(!selTrk || tracks.get(selTrk) !== tk || !tk || !tk.nav) return false;
     if(tk.nav.mt === 'ARRIVAL' && Number.isFinite(tk.t1) && t <= tk.t1) return false;
@@ -54,22 +84,28 @@
     const tm = window.navGroundTimes(tk.nav, tk);
     return !!(tm && t >= tm.start && t <= tm.end && routeFallback(tk).length >= 2);
   };
+
   window.renderNavGroundLayer = function(t){
     if(typeof ensureNavGroundLayers !== 'function' || !ensureNavGroundLayers()) return;
     const keep = new Set();
+
     if(selTrk){
       const tk = tracks.get(selTrk), navR = tk && tk.nav, tm = navR && window.navGroundTimes(navR, tk);
       if(tm && t >= tm.start && t <= tm.end){
         const pts = routeFallback(tk);
         if(pts.length >= 2){
-          const pos = interpPath(pts, (t - tm.start) / (tm.end - tm.start));
+          const span = Math.max(1, tm.end - tm.start);
+          const frac = Math.max(0, Math.min(1, (t - tm.start) / span));
+          const pos = interpPath(pts, frac);
           if(pos){
             const clr = navR.mt === 'DEPARTURE' ? '#1a88ff' : '#f5a500';
             const key = String(selTrk); keep.add(key);
-            if(!navGroundLines.has(key)){
+
+            if(!navGroundLines.has(key) && !(pts.length === 2 && pts[0].lat === pts[1].lat && pts[0].lng === pts[1].lng)){
               const line = L.polyline(pts.map(p=>[p.lat,p.lng]), {color:clr, weight:3, opacity:.75, dashArray:'7,5', interactive:false});
               navGroundLineGroup.addLayer(line); navGroundLines.set(key,line);
             }
+
             const hdg = Math.round((pos.hdg||0)/5)*5;
             const tip = '<span style="font-weight:700;color:'+clr+'">'+esc(tk.csn||'')+'</span><br><span style="font-size:9px;color:#aaa">NAV ground — '+esc(pos.label||'')+'</span>';
             if(!navGroundMarkers.has(key)){
@@ -84,6 +120,7 @@
         }
       }
     }
+
     for(const [k,e] of [...navGroundMarkers]) if(!keep.has(k)){ navGroundMarkerGroup.removeLayer(e.marker); navGroundMarkers.delete(k); }
     for(const [k,l] of [...navGroundLines]) if(!keep.has(k)){ navGroundLineGroup.removeLayer(l); navGroundLines.delete(k); }
   };
