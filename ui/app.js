@@ -22,11 +22,19 @@ const WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const dateObj = d => new Date(2000 + +d.slice(0, 2), +d.slice(2, 4) - 1, +d.slice(4, 6));
 
 /* ------------------------------------------------------------- API bridge */
-function api() { return window.pywebview && window.pywebview.api; }
+const useHttp = location.protocol.startsWith('http');
+function api() { return useHttp ? true : (window.pywebview && window.pywebview.api); }
 async function call(name, ...args) {
-  const a = api();
-  if (!a) throw new Error('Backend Python não disponível (a app tem de correr via app.py).');
-  const r = await a[name](...args);
+  let r;
+  if (useHttp) {
+    const resp = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: name, args }) });
+    if (!resp.ok) throw new Error('Erro de comunicação com o Python (HTTP ' + resp.status + ')');
+    r = await resp.json();
+  } else {
+    const a = window.pywebview && window.pywebview.api;
+    if (!a) throw new Error('Backend Python não disponível (a app tem de correr via app.py).');
+    r = await a[name](...args);
+  }
   if (!r || !r.ok) throw new Error((r && r.error) || 'Erro desconhecido');
   return r.data;
 }
@@ -399,5 +407,5 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.tab').forEach(t => t.onclick = () => showTab(t.dataset.tab));
   document.querySelectorAll('.subtab').forEach(t => t.onclick = () => { const par = t.parentElement; par.querySelectorAll('.subtab').forEach(x => x.classList.toggle('active', x === t)); par.parentElement.querySelectorAll('.subpane').forEach(p => p.classList.toggle('active', p.id === 'sub-' + t.dataset.sub)); if (window.Analyses) Analyses.onSub(t.dataset.sub); });
   document.querySelectorAll('#flTable th').forEach(th => th.onclick = () => { const k = th.dataset.k; state.sortAsc = state.sortKey === k ? !state.sortAsc : true; state.sortKey = k; renderTable(); });
-  if (api()) boot(); else window.addEventListener('pywebviewready', boot);
+  if (useHttp || api()) boot(); else window.addEventListener('pywebviewready', boot);
 });

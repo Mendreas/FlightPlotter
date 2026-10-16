@@ -20,6 +20,7 @@ import webview
 
 from core.db import Database, resource_path
 from core.filenames import date_label
+from core.httpapi import start_server
 from core.service import Service
 
 APP_NAME = "Flight Plotter"
@@ -305,7 +306,7 @@ class Api:
     def ia_clear(self):
         return self._safe(lambda: self.svc.ia_history.clear())
 
-    def get_tracks(self, flight_ids, max_points=400000):
+    def get_tracks(self, flight_ids, max_points=120000):
         return self._safe(self.db.tracks, flight_ids, int(max_points))
 
     def get_flight(self, flight_id):
@@ -353,9 +354,11 @@ def main():
     log = setup_logging(data_dir())
     logging.info("=== Flight Plotter %s a arrancar (python %s, frozen=%s) ===", VERSION, sys.version.split()[0], getattr(sys, "frozen", False))
     api = Api()
-    html = resource_path("ui", "index.html")
-    logging.info("UI em %s (existe=%s); log em %s", html, html.exists(), log)
-    window = webview.create_window(f"{APP_NAME} {VERSION} — NAV Portugal", str(html), js_api=api,
+    ui_dir = resource_path("ui")
+    port = start_server(api, ui_dir)
+    html = f"http://127.0.0.1:{port}/index.html"
+    logging.info("UI em %s (pasta %s existe=%s); log em %s", html, ui_dir, ui_dir.exists(), log)
+    window = webview.create_window(f"{APP_NAME} {VERSION} — NAV Portugal", html, js_api=api,
                                    width=1500, height=940, min_size=(1100, 700), background_color="#0b1220")
     api.window = window
     logging.info("Janela criada; a iniciar webview")

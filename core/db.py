@@ -439,7 +439,7 @@ class Database:
                 "alt_first", "alt_last", "alt_min", "alt_max", "cls", "modes", "actype", "wtc", "blocks"]
         return [dict(zip(keys, r)) for r in rows]
 
-    def tracks(self, flight_ids: Iterable[int], max_points: int = 400_000) -> dict:
+    def tracks(self, flight_ids: Iterable[int], max_points: int = 120_000) -> dict:
         """Trajetórias dos movimentos pedidos. Reduz amostragem se exceder max_points."""
         ids = list(flight_ids)
         if not ids:
@@ -456,8 +456,10 @@ class Database:
             QUALIFY (row_number() OVER (PARTITION BY s.flight_id ORDER BY p.tod_sec) - 1) % {step} = 0
             ORDER BY s.flight_id, p.tod_sec""", [ids]).fetchall()
         out: dict[int, list] = {}
+        r5 = lambda v: None if v is None else round(v, 5)
+        r0 = lambda v: None if v is None else round(v)
         for fid, tod, ts, lat, lon, alt, ias, gs, roc, tas in rows:
-            out.setdefault(fid, []).append([lat, lon, alt, tod, ias, gs, roc, tas, ts])
+            out.setdefault(fid, []).append([r5(lat), r5(lon), alt, tod, r0(ias), r0(gs), r0(roc), r0(tas), ts])
         return {"tracks": out, "step": step, "points": len(rows)}
 
     def flight_points(self, flight_id: int) -> list[dict]:
