@@ -92,8 +92,12 @@ class Database:
         c.execute("CREATE TABLE IF NOT EXISTS analysis_cache(key VARCHAR PRIMARY KEY, flight_id INTEGER, value VARCHAR, created TIMESTAMP DEFAULT current_timestamp)")
         c.execute("CREATE TABLE IF NOT EXISTS user_points(name VARCHAR PRIMARY KEY, lat DOUBLE, lon DOUBLE, descr VARCHAR)")
         if c.execute("SELECT count(*) FROM files").fetchone()[0] and not c.execute("SELECT value FROM meta WHERE key='airports_geo_v1'").fetchone():
-            n = self.fix_airports()
-            c.execute("INSERT OR REPLACE INTO meta VALUES ('airports_geo_v1', ?)", [str(n)])
+            try:
+                n = self.fix_airports()
+                c.execute("INSERT OR REPLACE INTO meta VALUES ('airports_geo_v1', ?)", [str(n)])
+                self._log(f"aeroportos redetetados pela posição: {n} ficheiro(s) alterado(s)")
+            except Exception as e:  # noqa: BLE001 — nunca impedir o arranque por causa desta manutenção
+                self._log(f"fix_airports falhou: {e}")
         if c.execute("SELECT count(*) FROM nmir").fetchone()[0] == 0:
             seed = resource_path("data", "nmir_seed.csv")
             if seed.exists():

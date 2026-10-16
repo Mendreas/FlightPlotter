@@ -64,7 +64,10 @@ class Api:
             logging.info("Base aberta: %s", self.db.summary())
         except Exception as e:  # noqa: BLE001
             logging.exception("Erro a abrir a base de dados")
-            self.init_error = str(e); self.db = None; self.svc = None
+            msg = str(e)
+            if "lock" in msg.lower() or "being used" in msg.lower():
+                msg = "A base de dados está aberta por outro programa — fecha o outro Flight Plotter (Gestor de Tarefas → FlightPlotter.exe) e volta a abrir. " + msg
+            self.init_error = msg; self.db = None; self.svc = None
 
     # -------------------------------------------------------------- utilidades
     def _js(self, code: str):
@@ -120,6 +123,8 @@ class Api:
 
     # -------------------------------------------------------------- importação
     def choose_folder(self):
+        if self.init_error:
+            return {"ok": False, "error": "Base de dados indisponível: " + self.init_error}
         try:
             res = self.window.create_file_dialog(webview.FOLDER_DIALOG)
             if res:
@@ -130,6 +135,8 @@ class Api:
 
     def import_folder(self, folder: str | None = None):
         """Arranca a importação em thread; o progresso chega ao JS por onImportProgress/onImportDone."""
+        if self.init_error:
+            return {"ok": False, "error": "Base de dados indisponível: " + self.init_error}
         if self._importing:
             return {"ok": False, "error": "Já está uma importação a decorrer."}
         if not folder:
