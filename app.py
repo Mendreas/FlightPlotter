@@ -145,8 +145,7 @@ class Api:
         def run():
             try:
                 logging.info("Início da importação de %s", folder)
-                with self._lock:
-                    res = self.db.import_folder(folder, progress)
+                res = self.db.import_folder(folder, progress, lock=self._lock)
                 logging.info("Importação concluída: %s", res)
                 self._js(f"onImportDone({json.dumps({'ok': True, 'data': res})})")
             except Exception as e:  # noqa: BLE001

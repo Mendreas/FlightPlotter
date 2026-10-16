@@ -311,7 +311,7 @@ function drawProfile(rows, f) {
 window.onImportProgress = (done, total, name) => {
   $('progress').classList.remove('hidden');
   $('progressBar').style.width = total ? (done / total * 100).toFixed(1) + '%' : '100%';
-  $('progressTxt').textContent = done ? `A importar ${done} / ${total} — ${name}` : name;
+  $('progressTxt').textContent = (done ? `A importar ${done} / ${total} — ${name}` : name) + ' · podes continuar a usar a app entretanto';
 };
 window.onImportDone = async r => {
   $('progress').classList.add('hidden');

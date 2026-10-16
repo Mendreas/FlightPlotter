@@ -261,9 +261,13 @@ class Database:
         return rows
 
     def import_folder(self, folder: str, progress: Callable[[int, int, str], None] | None = None,
-                      batch_size: int = 24) -> dict:
+                      batch_size: int = 24, lock=None) -> dict:
+        """lock: opcional; se dado, é tomado apenas durante cada lote (a app continua utilizável entre lotes)."""
+        import contextlib
+        guard = (lambda: lock) if lock is not None else contextlib.nullcontext
         t0 = time.time()
-        todo, total_found = self.pending_files(folder)
+        with guard():
+            todo, total_found = self.pending_files(folder)
         self._log(f"== importar {folder}: {len(todo)} novos de {total_found} (scan {time.time()-t0:.1f}s)")
         if progress and todo:
             mb = sum(os.path.getsize(p) for p in todo) / 1048576
@@ -272,7 +276,8 @@ class Database:
         err_list: list[str] = []
         for i in range(0, len(todo), batch_size):
             chunk = todo[i:i + batch_size]
-            r, errs = self._import_batch(chunk)
+            with guard():
+                r, errs = self._import_batch(chunk)
             rows += r; err_list += errs
             done += len(chunk)
             if progress:
@@ -281,9 +286,11 @@ class Database:
             if progress:
                 progress(done, len(todo), "a construir tabela de movimentos…")
             t_r = time.time()
-            self.rebuild_flights()
+            with guard():
+                self.rebuild_flights()
             self._log(f"rebuild_flights {time.time()-t_r:.1f}s")
-        self.con.execute("INSERT OR REPLACE INTO meta VALUES ('last_folder', ?)", [folder])
+        with guard():
+            self.con.execute("INSERT OR REPLACE INTO meta VALUES ('last_folder', ?)", [folder])
         self._log(f"== fim: {rows} linhas, {len(err_list)} erros, total {time.time()-t0:.1f}s")
         return {"found": total_found, "new": len(todo), "imported": len(todo) - len(err_list), "errors": len(err_list),
                 "rows": rows, "ms": int((time.time() - t0) * 1000), "error_list": err_list[:20]}
