@@ -340,7 +340,7 @@ async function refreshState() {
   $('ver').textContent = 'v' + s.version;
   $('dbFiles').textContent = fmt(s.files); $('dbRows').textContent = fmt(s.rows); $('dbFlights').textContent = fmt(s.flights);
   $('dbSize').textContent = `base ${(s.db_bytes / 1048576).toFixed(0)} MB`;
-  $('dbSize').title = s.db_path;
+  $('dbSize').title = s.db_path + (s.log_path ? '\nRegisto: ' + s.log_path : '');
   $('btnReimport').disabled = !s.last_folder;
   if (s.last_folder) $('btnReimport').title = 'Procurar ficheiros novos em ' + s.last_folder;
   return s;

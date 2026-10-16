@@ -7,6 +7,7 @@ Gerar .exe (Windows):          build_windows.bat
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import subprocess
@@ -23,6 +24,16 @@ from core.service import Service
 
 APP_NAME = "Flight Plotter"
 VERSION = "2.0.0"
+
+
+def setup_logging(folder: Path):
+    log = folder / "app.log"
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(threadName)s %(message)s",
+                        handlers=[logging.FileHandler(log, encoding="utf-8")])
+    logging.getLogger("pywebview").setLevel(logging.INFO)
+    sys.excepthook = lambda t, v, tb: logging.error("Exceção não tratada", exc_info=(t, v, tb))
+    threading.excepthook = lambda a: logging.error("Exceção em thread %s", a.thread.name, exc_info=(a.exc_type, a.exc_value, a.exc_traceback))
+    return log
 
 
 def data_dir() -> Path:
@@ -42,11 +53,18 @@ class Api:
     """Métodos chamados a partir do JavaScript via window.pywebview.api.<nome>(...)."""
 
     def __init__(self):
-        self.db = Database(data_dir() / "flightplotter.duckdb")
-        self.svc = Service(self.db)
         self.window: webview.Window | None = None
         self._importing = False
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        self.init_error = None
+        try:
+            logging.info("A abrir base de dados em %s", data_dir())
+            self.db = Database(data_dir() / "flightplotter.duckdb")
+            self.svc = Service(self.db)
+            logging.info("Base aberta: %s", self.db.summary())
+        except Exception as e:  # noqa: BLE001
+            logging.exception("Erro a abrir a base de dados")
+            self.init_error = str(e); self.db = None; self.svc = None
 
     # -------------------------------------------------------------- utilidades
     def _js(self, code: str):
@@ -57,21 +75,33 @@ class Api:
                 pass
 
     def _safe(self, fn, *a, **kw):
+        name = getattr(fn, "__name__", "?")
+        if self.init_error and fn is not self._state_fn:
+            return {"ok": False, "error": "Base de dados indisponível: " + self.init_error}
+        t0 = time.time()
         try:
             with self._lock:
-                return {"ok": True, "data": fn(*a, **kw)}
+                r = {"ok": True, "data": fn(*a, **kw)}
+            dt = time.time() - t0
+            if dt > 0.5:
+                logging.info("%s demorou %.1fs", name, dt)
+            return r
         except Exception as e:  # noqa: BLE001
-            traceback.print_exc()
+            logging.exception("Erro em %s", name)
             return {"ok": False, "error": str(e)}
 
     # ------------------------------------------------------------------ estado
+    def _state_fn(self):
+        if self.init_error:
+            raise RuntimeError("Não foi possível abrir a base de dados (está outro Flight Plotter aberto?). " + self.init_error)
+        s = self.db.summary()
+        s["version"] = VERSION
+        s["importing"] = self._importing
+        s["log_path"] = str(data_dir() / "app.log")
+        return s
+
     def get_state(self):
-        def f():
-            s = self.db.summary()
-            s["version"] = VERSION
-            s["importing"] = self._importing
-            return s
-        return self._safe(f)
+        return self._safe(self._state_fn)
 
     def get_filters(self):
         def f():
@@ -109,12 +139,15 @@ class Api:
         self._importing = True
 
         def progress(done, total, name):
-            self._js(f"onImportProgress({done},{total},{json.dumps(name)})")
+            logging.info("importação %s/%s %s", done, total, name)
+            threading.Thread(target=self._js, args=(f"onImportProgress({done},{total},{json.dumps(name)})",), daemon=True).start()
 
         def run():
             try:
+                logging.info("Início da importação de %s", folder)
                 with self._lock:
                     res = self.db.import_folder(folder, progress)
+                logging.info("Importação concluída: %s", res)
                 self._js(f"onImportDone({json.dumps({'ok': True, 'data': res})})")
             except Exception as e:  # noqa: BLE001
                 traceback.print_exc()
@@ -311,12 +344,21 @@ class Api:
 
 
 def main():
+    log = setup_logging(data_dir())
+    logging.info("=== Flight Plotter %s a arrancar (python %s, frozen=%s) ===", VERSION, sys.version.split()[0], getattr(sys, "frozen", False))
     api = Api()
     html = resource_path("ui", "index.html")
+    logging.info("UI em %s (existe=%s); log em %s", html, html.exists(), log)
     window = webview.create_window(f"{APP_NAME} {VERSION} — NAV Portugal", str(html), js_api=api,
                                    width=1500, height=940, min_size=(1100, 700), background_color="#0b1220")
     api.window = window
-    webview.start(debug="--debug" in sys.argv)
+    logging.info("Janela criada; a iniciar webview")
+    try:
+        webview.start(debug="--debug" in sys.argv)
+    except Exception:  # noqa: BLE001
+        logging.exception("webview.start falhou")
+        raise
+    logging.info("Aplicação terminada")
 
 
 if __name__ == "__main__":
