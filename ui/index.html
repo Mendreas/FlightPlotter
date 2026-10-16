@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<title>Flight Plotter</title>
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand">
+    <span class="logo">✈</span>
+    <div>
+      <div class="ttl">Flight Plotter <span id="ver" class="ver"></span></div>
+      <div class="sub">NAV Portugal · GOPLIS · análise de trajetórias radar</div>
+    </div>
+  </div>
+  <div class="dbinfo" id="dbinfo">
+    <span class="pill"><b id="dbFiles">0</b> ficheiros</span>
+    <span class="pill"><b id="dbRows">0</b> plots</span>
+    <span class="pill"><b id="dbFlights">0</b> movimentos</span>
+    <span class="pill muted" id="dbSize"></span>
+  </div>
+  <div class="actions">
+    <button class="btn primary" id="btnImport" title="Escolher uma pasta com CSV do CNS (subpastas incluídas)">📂 Importar pasta…</button>
+    <button class="btn" id="btnReimport" title="Procura ficheiros novos na última pasta importada">🔄 Atualizar</button>
+    <button class="btn" id="btnNmir" title="Importar Excel NMIR (tipos de aeronave)">📊 NMIR…</button>
+    <button class="btn ghost" id="btnFolder" title="Abrir a pasta onde está a base de dados">🗄</button>
+  </div>
+</header>
+
+<div id="progress" class="progress hidden">
+  <div class="bar"><div id="progressBar"></div></div>
+  <div id="progressTxt">A importar…</div>
+</div>
+
+<main id="main">
+  <aside id="sidebar">
+    <section class="box">
+      <div class="box-h">Aeroporto</div>
+      <select id="selAirport" class="inp"></select>
+    </section>
+
+    <section class="box">
+      <div class="box-h">Dias <span class="mini" id="dayCount"></span>
+        <span class="box-tools">
+          <a href="#" id="daysAll">todos</a> · <a href="#" id="daysNone">nenhum</a> · <a href="#" id="daysLast">último</a>
+        </span>
+      </div>
+      <div id="dayList" class="daylist"></div>
+    </section>
+
+    <section class="box">
+      <div class="box-h">Blocos horários</div>
+      <div id="blockChips" class="chips"></div>
+    </section>
+
+    <section class="box">
+      <div class="box-h">Filtros</div>
+      <div class="row">
+        <input id="inpCsn" class="inp" placeholder="Callsign (ex: TAP, RYR12)">
+        <select id="selCls" class="inp small">
+          <option value="">Todos</option>
+          <option value="arr">Chegadas</option>
+          <option value="dep">Partidas</option>
+          <option value="lvl">Sobrevoos</option>
+        </select>
+      </div>
+      <button class="btn primary wide" id="btnApply">▶ Aplicar filtro</button>
+    </section>
+
+    <section class="box grow">
+      <div class="box-h">Movimentos <span class="mini" id="flCount"></span>
+        <span class="box-tools"><a href="#" id="flShowAll">mostrar todos</a> · <a href="#" id="flHideAll">esconder</a></span>
+      </div>
+      <div id="flList" class="fllist"><div class="empty">Importa uma pasta e aplica um filtro.</div></div>
+    </section>
+  </aside>
+
+  <section id="content">
+    <nav class="tabs">
+      <button class="tab active" data-tab="map">🗺 Mapa</button>
+      <button class="tab" data-tab="tbl">☰ Tabela</button>
+      <span class="tabs-right">
+        <label class="chk"><input type="checkbox" id="chkPoints" checked> Pontos AIP</label>
+        <select id="selGroup" class="inp tiny"></select>
+        <label class="chk"><input type="checkbox" id="chkColorCls" checked> Cor por classe</label>
+        <label class="chk"><input type="checkbox" id="chkTiles" checked> Mapa de fundo</label>
+      </span>
+    </nav>
+
+    <div id="tab-map" class="tabpane active">
+      <div id="map"></div>
+      <div id="legend" class="legend">
+        <span><i style="background:#3b9cff"></i>Chegada</span>
+        <span><i style="background:#ff9b2f"></i>Partida</span>
+        <span><i style="background:#8a93a6"></i>Sobrevoo</span>
+      </div>
+    </div>
+
+    <div id="tab-tbl" class="tabpane">
+      <div class="tbl-tools">
+        <span id="tblInfo" class="muted"></span>
+        <button class="btn" id="btnExport">⬇ Exportar CSV</button>
+      </div>
+      <div class="tbl-wrap">
+        <table id="flTable">
+          <thead><tr>
+            <th data-k="date">Data</th><th data-k="csn">Callsign</th><th data-k="actype">Tipo</th>
+            <th data-k="wtc">WTC</th><th data-k="cls">Classe</th><th data-k="tod_first">Início</th>
+            <th data-k="tod_last">Fim</th><th data-k="alt_first">Alt ini</th><th data-k="alt_last">Alt fim</th>
+            <th data-k="alt_max">Alt máx</th><th data-k="n">Plots</th><th data-k="blocks">Blocos</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer id="status">
+      <span class="dot" id="sDot"></span>
+      <span id="sTxt">Pronto.</span>
+      <span class="right" id="sTime"></span>
+    </footer>
+  </section>
+
+  <aside id="detail" class="hidden">
+    <div class="d-head">
+      <div>
+        <div class="d-csn" id="dCsn">—</div>
+        <div class="d-sub" id="dSub"></div>
+      </div>
+      <button class="btn ghost" id="dClose">✕</button>
+    </div>
+    <div class="d-kpis" id="dKpis"></div>
+    <canvas id="dChart" width="360" height="150"></canvas>
+    <div class="d-tblwrap">
+      <table class="d-tbl" id="dTbl">
+        <thead><tr><th>TOD</th><th>Alt ft</th><th>IAS</th><th>GS</th><th>ROC</th><th>Dist THR</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </aside>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
