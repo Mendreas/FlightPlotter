@@ -19,7 +19,7 @@ jobs:
         run: >
           python -m PyInstaller --noconfirm --clean --onedir --windowed --name FlightPlotter
           --add-data "ui;ui" --add-data "data;data" --collect-all duckdb --collect-all webview --collect-all pptx
-          --hidden-import openpyxl app.py
+          --hidden-import openpyxl --hidden-import tkinter app.py
       - name: Publicar artefacto (pasta FlightPlotter com o .exe dentro)
         uses: actions/upload-artifact@v4
         with:

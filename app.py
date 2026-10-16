@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
+import multiprocessing
 import os
+import socket
 import time
+import urllib.request
 import subprocess
 import sys
 import threading
@@ -54,8 +57,9 @@ class Api:
     """Métodos chamados a partir do JavaScript via window.pywebview.api.<nome>(...)."""
 
     def __init__(self):
-        self.window: webview.Window | None = None
+        self.window = None
         self._importing = False
+        self._import_state = {"importing": False, "done": 0, "total": 0, "name": "", "result": None}
         self._lock = threading.RLock()
         self.init_error = None
         try:
@@ -146,24 +150,34 @@ class Api:
             return {"ok": False, "error": "Pasta inválida."}
         self._importing = True
 
+        self._import_state = {"importing": True, "done": 0, "total": 0, "name": "A procurar ficheiros CSV…", "result": None}
+
         def progress(done, total, name):
             logging.info("importação %s/%s %s", done, total, name)
-            threading.Thread(target=self._js, args=(f"onImportProgress({done},{total},{json.dumps(name)})",), daemon=True).start()
+            self._import_state.update(done=done, total=total, name=name)
 
         def run():
             try:
                 logging.info("Início da importação de %s", folder)
                 res = self.db.import_folder(folder, progress, lock=self._lock)
                 logging.info("Importação concluída: %s", res)
-                self._js(f"onImportDone({json.dumps({'ok': True, 'data': res})})")
+                self._import_state["result"] = {"ok": True, "data": res}
             except Exception as e:  # noqa: BLE001
-                traceback.print_exc()
-                self._js(f"onImportDone({json.dumps({'ok': False, 'error': str(e)})})")
+                logging.exception("Erro na importação")
+                self._import_state["result"] = {"ok": False, "error": str(e)}
             finally:
                 self._importing = False
+                self._import_state["importing"] = False
 
         threading.Thread(target=run, daemon=True).start()
         return {"ok": True, "data": folder}
+
+    def import_status(self):
+        """Estado da importação em curso (a interface consulta periodicamente)."""
+        st = dict(self._import_state)
+        if st["result"] is not None and not st["importing"]:
+            self._import_state["result"] = None   # entregue uma vez
+        return {"ok": True, "data": st}
 
     def remove_missing(self):
         return self._safe(self.db.remove_missing)
@@ -350,23 +364,49 @@ class Api:
             return {"ok": False, "error": str(e)}
 
 
+def _free_port() -> int:
+    with socket.socket() as so:
+        so.bind(("127.0.0.1", 0))
+        return so.getsockname()[1]
+
+
+def _wait_server(port: int, timeout: float = 60.0) -> bool:
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/api", data=b'{"method":"get_state","args":[]}',
+                                         headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=2).read()
+            return True
+        except Exception:  # noqa: BLE001
+            time.sleep(0.3)
+    return False
+
+
 def main():
+    from core import worker
+    multiprocessing.freeze_support()
     log = setup_logging(data_dir())
     logging.info("=== Flight Plotter %s a arrancar (python %s, frozen=%s) ===", VERSION, sys.version.split()[0], getattr(sys, "frozen", False))
-    api = Api()
-    ui_dir = resource_path("ui")
-    port = start_server(api, ui_dir)
-    html = f"http://127.0.0.1:{port}/index.html"
-    logging.info("UI em %s (pasta %s existe=%s); log em %s", html, ui_dir, ui_dir.exists(), log)
-    window = webview.create_window(f"{APP_NAME} {VERSION} — NAV Portugal", html, js_api=api,
-                                   width=1500, height=940, min_size=(1100, 700), background_color="#0b1220")
-    api.window = window
+    port = _free_port()
+    proc = multiprocessing.Process(target=worker.run, args=(port, str(data_dir()), str(log)), name="flightplotter-worker", daemon=True)
+    proc.start()
+    logging.info("Processo de dados iniciado (pid %s) na porta %s", proc.pid, port)
+    url = f"http://127.0.0.1:{port}/index.html"
+    if not _wait_server(port, 120):
+        logging.error("O processo de dados não respondeu a tempo")
+        url = "data:text/html,<h2 style='font-family:sans-serif;padding:40px'>O motor de dados não arrancou. Consulta " + str(log).replace("\\", "/") + "</h2>"
+    window = webview.create_window(f"{APP_NAME} {VERSION} — NAV Portugal", url, width=1500, height=940, min_size=(1100, 700),
+                                   background_color="#0b1220")
     logging.info("Janela criada; a iniciar webview")
     try:
         webview.start(debug="--debug" in sys.argv)
     except Exception:  # noqa: BLE001
         logging.exception("webview.start falhou")
         raise
+    finally:
+        if proc.is_alive():
+            proc.terminate()
     logging.info("Aplicação terminada")
 
 

@@ -329,6 +329,16 @@ window.onImportDone = async r => {
   await refreshState(); await loadFilters();
   if (d.new > 0 && !state.days.size) { selectLastDay(); applyFilter(); } else if (d.new > 0) renderFilters();
 };
+let pollT = null;
+async function pollImport() {
+  clearTimeout(pollT);
+  try {
+    const st = await call('import_status');
+    if (st.result) { window.onImportDone(st.result); return; }
+    if (st.importing) { window.onImportProgress(st.done, st.total, st.name); pollT = setTimeout(pollImport, 800); return; }
+    $('progress').classList.add('hidden');
+  } catch (e) { pollT = setTimeout(pollImport, 2000); }
+}
 async function importFolder(useLast) {
   try {
     let folder = null;
@@ -336,6 +346,7 @@ async function importFolder(useLast) {
     const f = await call('import_folder', folder);
     $('progress').classList.remove('hidden'); $('progressBar').style.width = '0%';
     $('progressTxt').textContent = 'A procurar ficheiros CSV em ' + f + ' …';
+    pollImport();
   } catch (e) { toast(e.message, 'err'); }
 }
 
@@ -376,6 +387,7 @@ async function boot() {
     const sg = $('selGroup'); sg.innerHTML = '<option value="ALL">Todos os pontos</option>';
     for (const g of Object.keys(pts.groups)) sg.insertAdjacentHTML('beforeend', `<option value="${g}">${g}</option>`);
     drawPoints(); renderAirports();
+    if (s.importing) pollImport();
     if (s.files > 0) { selectLastDay(); applyFilter(); }
     else status('Sem dados. Clica "Importar pasta…" e escolhe a pasta com os CSV do CNS.', 'on');
   } catch (e) { status(e.message, 'err'); toast(e.message, 'err'); }
