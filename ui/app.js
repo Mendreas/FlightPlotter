@@ -154,10 +154,11 @@ function renderBlocks() {
 function renderAirports() {
   const c = $('aptChips'); c.innerHTML = '';
   const counts = new Map(); state.allFlights.forEach(f => counts.set(f.airport, (counts.get(f.airport) || 0) + 1));
-  const list = state.airports.length ? state.airports : (state.filters ? state.filters.airports : []);
-  for (const a of list) {
-    const el = document.createElement('span'); el.className = 'apt' + (a === state.airport ? ' on' : '');
-    el.innerHTML = `${a}${counts.has(a) ? ` <b>${fmt(counts.get(a))}</b>` : ''}`;
+  const inDb = new Set(state.filters ? state.filters.airports : []);
+  for (const a of ['LPPT', 'LPPR', 'LPFR', 'LPMA']) {
+    const el = document.createElement('span'); el.className = 'apt' + (a === state.airport ? ' on' : '') + (inDb.has(a) ? '' : ' nodata');
+    el.innerHTML = `${a}${counts.has(a) ? ` <b>${fmt(counts.get(a))}</b>` : inDb.has(a) ? '' : ' <i>sem dados</i>'}`;
+    el.title = inDb.has(a) ? `${a} — ${counts.get(a) || 0} movimento(s) no filtro actual` : `${a} — nenhum ficheiro importado deste aeroporto`;
     el.onclick = () => switchAirport(a);
     c.appendChild(el);
   }

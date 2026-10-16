@@ -24,6 +24,10 @@ import duckdb
 
 from .filenames import parse_path, block_from_hour
 
+AIRPORT_CENTERS = {"LPPT": (38.7813, -9.1359), "LPPR": (41.2481, -8.6814), "LPFR": (37.0153, -7.9723), "LPMA": (32.6978, -16.7745)}
+NEAREST_AIRPORT_SQL = ("CASE " + " ".join(
+    f"WHEN d_{k} = least({', '.join(f'd_{a}' for a in AIRPORT_CENTERS)}) THEN '{k}'" for k in AIRPORT_CENTERS) + " END")
+
 GAP_SPLIT_S = 300          # buraco de tempo que separa dois movimentos do mesmo callsign
 MIN_POINTS_FLIGHT = 3      # movimentos com menos plots são ignorados
 
@@ -87,11 +91,39 @@ class Database:
         c.execute("CREATE TABLE IF NOT EXISTS meta(key VARCHAR PRIMARY KEY, value VARCHAR)")
         c.execute("CREATE TABLE IF NOT EXISTS analysis_cache(key VARCHAR PRIMARY KEY, flight_id INTEGER, value VARCHAR, created TIMESTAMP DEFAULT current_timestamp)")
         c.execute("CREATE TABLE IF NOT EXISTS user_points(name VARCHAR PRIMARY KEY, lat DOUBLE, lon DOUBLE, descr VARCHAR)")
+        if c.execute("SELECT count(*) FROM files").fetchone()[0] and not c.execute("SELECT value FROM meta WHERE key='airports_geo_v1'").fetchone():
+            n = self.fix_airports()
+            c.execute("INSERT OR REPLACE INTO meta VALUES ('airports_geo_v1', ?)", [str(n)])
         if c.execute("SELECT count(*) FROM nmir").fetchone()[0] == 0:
             seed = resource_path("data", "nmir_seed.csv")
             if seed.exists():
                 c.execute("INSERT INTO nmir SELECT csn, date, actype, wtc FROM read_csv(?, header=true, all_varchar=true)",
                           [str(seed)])
+
+    def fix_airports(self) -> int:
+        """Redeteta o aeroporto de cada ficheiro pela posição média dos plots (ficheiros sem ICAO no nome)."""
+        from .filenames import airport_from_name
+        c = self.con
+        rows = c.execute("SELECT file_id, path, airport FROM files").fetchall()
+        todo = [fid for fid, path, apt in rows if not airport_from_name(path)]
+        if not todo:
+            return 0
+        dist_cols = ", ".join(f"abs(la-({v[0]}))+abs(lo-({v[1]})) AS d_{k}" for k, v in AIRPORT_CENTERS.items())
+        c.execute(f"""
+            CREATE OR REPLACE TEMP TABLE fix AS
+            SELECT g.file_id, f.airport AS old, g.apt
+            FROM (SELECT file_id, {NEAREST_AIRPORT_SQL} AS apt FROM (
+                    SELECT file_id, {dist_cols} FROM (
+                        SELECT file_id, avg(lat) la, avg(lon) lo FROM points
+                        WHERE file_id IN (SELECT unnest(?::INTEGER[])) GROUP BY file_id))) g
+            JOIN files f USING (file_id)
+            WHERE f.airport IS DISTINCT FROM g.apt""", [todo])
+        n = c.execute("SELECT count(*) FROM fix").fetchone()[0]
+        if n:
+            c.execute("UPDATE files SET airport = x.apt FROM fix x WHERE x.file_id = files.file_id")
+            c.execute("UPDATE points SET airport = x.apt FROM fix x WHERE x.file_id = points.file_id")
+            self.rebuild_flights()
+        return n
 
     # ------------------------------------------------------------------ import
     @staticmethod
@@ -237,6 +269,14 @@ class Database:
                 CREATE OR REPLACE TEMP TABLE pstat AS
                 SELECT file_id, count(*) n, min(tod_sec) tmin FROM points
                 WHERE file_id IN (SELECT file_id FROM pending) GROUP BY file_id""")
+            # aeroporto pela posição média dos plots quando o nome não o indica
+            c.execute("CREATE OR REPLACE TEMP TABLE pgeo AS SELECT file_id, avg(lat) la, avg(lon) lo FROM points WHERE file_id IN (SELECT file_id FROM pending) GROUP BY file_id")
+            dist_cols = ", ".join(f"abs(la-({v[0]}))+abs(lo-({v[1]})) AS d_{k}" for k, v in AIRPORT_CENTERS.items())
+            c.execute(f"""
+                UPDATE pending SET airport = g.apt FROM (SELECT file_id, {NEAREST_AIRPORT_SQL} AS apt FROM (SELECT file_id, {dist_cols} FROM pgeo)) g
+                WHERE g.file_id = pending.file_id AND pending.airport IS NULL""")
+            c.execute("UPDATE pending SET airport = 'LPPT' WHERE airport IS NULL")
+            c.execute("UPDATE points SET airport = t.airport FROM pending t WHERE t.file_id = points.file_id AND points.airport IS DISTINCT FROM t.airport")
             c.execute("""
                 UPDATE pending SET block = CASE
                     WHEN s.tmin IS NULL THEN pending.block

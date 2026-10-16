@@ -50,7 +50,7 @@ def parse_path(path: str):
     if r is None:
         r = {"date": "??", "block": "??", "airport": None}
     if not r.get("airport"):
-        r["airport"] = airport_from_name(str(p)) or "LPPT"
+        r["airport"] = airport_from_name(str(p))   # None → detetado pela posição dos plots na importação
     return r
 
 

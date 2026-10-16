@@ -35,7 +35,7 @@ class Service:
         self.dates, self.blocks, self.csn, self.cls = list(dates), list(blocks), csn or "", cls or ""
         self.all_flights = self.db.flights_list(None, dates, blocks, csn, cls)
         airports = sorted({f["airport"] for f in self.all_flights})
-        if airport and airport in airports:
+        if airport:
             self.airport = airport
         elif self.airport not in airports and airports:
             self.airport = "LPPT" if "LPPT" in airports else airports[0]

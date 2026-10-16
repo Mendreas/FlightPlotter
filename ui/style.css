@@ -193,3 +193,4 @@ tr.rowsel{background:#1d3a66!important}tr.clk{cursor:pointer}
 .fl.card2.sel{border-color:var(--accent)}
 .apt{border:1px solid var(--line);border-radius:20px;padding:4px 10px;font-size:11px;cursor:pointer;color:var(--muted);font-family:var(--mono)}
 .apt.on{background:#1d3a66;border-color:var(--accent);color:#fff}.apt b{color:var(--txt)}
+.apt.nodata{opacity:.45}.apt i{font-style:normal;font-size:9px}
