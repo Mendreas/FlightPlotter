@@ -21,6 +21,22 @@ CSV do CNS ──(importa 1 vez)──►  base DuckDB local  ──(SQL, ms)─
 
 A base fica em `%LOCALAPPDATA%\FlightPlotter\` (botão 🗄 abre a pasta). Aí fica também o `import.log` com os tempos de cada importação.
 
+## Análises disponíveis
+
+| Aba | Conteúdo |
+|---|---|
+| Mapa / Tabela | Trajetórias, pontos AIP, lista e tabela de movimentos, detalhe por voo (perfil 3°, violações, relatório imprimível) |
+| Final | Deteção de aterragens (FAF virtual, corredor, Alt THR), métricas FAF→THR, separação temporal, corredor no mapa |
+| Vel. STAR | Conformidade de IAS nos pontos STAR (CPA por raio), limites editáveis, por waypoint e por operador |
+| Vel. APP | Violações por voo e pontos (PESEX/NETVO/OKNIB/THR02, UPKAT/TOPVI/ROKOB/THR20…), histogramas e PPTX; violações por distância na escala da final 12 NM→THR |
+| Análise Op. | FAST (pares de chegadas, AA/ADA/ADDA/AD…A, detalhe da final), Análise de Dados (KPIs, 11 gráficos, timeline, tabelas, relatório), Análise Diária (dias/semana, callsigns comuns, relatório), RRMS (ponto 2400 m TWY U6/P), ROT |
+| KPIs | Resumo operacional, aproximações, taxa de aterragem rolling 60 min, separações, CDO, IAS STAR, por hora/dia/operador, relatório |
+| Pontos | Passagens num ponto com filtro de IAS, sequência num ponto (distância à frente/atrás), pontos personalizados (points.json) |
+| Análise IA | Chat com Claude / OpenAI / Mistral / Azure / Groq sobre o resumo das análises (chave guardada localmente) |
+
+Todas as abas exportam para Excel; os relatórios abrem no navegador (Imprimir → Guardar como PDF).
+As especificações detalhadas dos algoritmos portados da app antiga estão em `docs/`.
+
 ## Correr em desenvolvimento (Windows)
 
 1. Instalar Python 3.11 ou superior (marcar *Add Python to PATH*).
@@ -44,7 +60,12 @@ cria 30 dias × 6 blocos de CSV sintéticos em `csv_teste/` para experimentar se
 
 ```
 app.py              janela (pywebview) + API chamada pelo JavaScript
-core/db.py          DuckDB: importação, tabela de movimentos, consultas
+core/db.py          DuckDB: importação, tabela de movimentos, consultas, cache de análises
+core/geo.py         geometria (haversine, eixo de aproximação), pistas, limites de velocidade, WTC
+core/analysis/      final.py (aterragens), fast.py (FAST/Dados/Diária), speeds.py (STAR/APP), ops.py (KPIs/RRMS/ROT/Pontos)
+core/service.py     orquestração por sessão (filtro actual, resultados, exportações, relatórios, IA)
+core/reports.py     Excel (openpyxl), PPTX (python-pptx), relatórios HTML imprimíveis
+core/ia.py          fornecedores de IA e contexto enviado ao modelo
 core/filenames.py   interpretação dos nomes LPPT_260415_04-08.csv / LPFR_2026-03-01_00-04.csv
 ui/                 interface (HTML/CSS/JS) com Leaflet local
 data/               pontos AIP, grupos de pontos, NMIR inicial

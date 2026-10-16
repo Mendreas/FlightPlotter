@@ -48,7 +48,7 @@ function nearestThr(airport, latlon) {
 }
 
 /* ------------------------------------------------------------- Map */
-let map, tiles, trackGroup, pointGroup, hiLayer;
+let map, tiles, trackGroup, pointGroup, overlayGroup;
 function initMap() {
   map = L.map('map', { zoomControl: true, preferCanvas: true }).setView(AIRPORT_CENTER.LPPT, 10);
   const BASES = {
@@ -62,6 +62,7 @@ function initMap() {
   tiles.addTo(map);
   trackGroup = L.layerGroup().addTo(map);
   pointGroup = L.layerGroup().addTo(map);
+  overlayGroup = L.layerGroup().addTo(map);
   // escala em NM
   L.control.scale({ imperial: false, nautical: true, metric: false }).addTo(map);
 }
@@ -156,6 +157,7 @@ async function applyFilter() {
       (tr.step > 1 ? ` (1 em cada ${tr.step})` : '') + ` · ${dates.length} dia(s)`, 'on',
       `consulta ${Math.round(t1 - t0)} ms · trajetórias ${Math.round(t2 - t1)} ms · total ${Math.round(performance.now() - t0)} ms`);
     $('tblInfo').textContent = `${state.flights.length} movimentos · ${fmt(st.points)} plots nos dias selecionados`;
+    if (window.Analyses) Analyses.onFilter();
   } catch (e) { status('Erro: ' + e.message, 'err'); toast(e.message, 'err'); }
 }
 function renderFlightList() {
@@ -201,12 +203,12 @@ async function selectFlight(id, zoom) {
   const l = state.layers.get(id); if (l) { l.bringToFront(); if (zoom) map.fitBounds(l.getBounds().pad(0.2)); }
   const f = state.byId.get(id);
   try {
-    const pts = await call('get_flight', id);
-    openDetail(f, pts);
+    const d = await call('flight_detail', id);
+    openDetail(f, d.points, d);
   } catch (e) { toast(e.message, 'err'); }
 }
 function closeDetail() { $('detail').classList.add('hidden'); }
-function openDetail(f, pts) {
+function openDetail(f, pts, d) {
   $('detail').classList.remove('hidden');
   $('dCsn').textContent = f.csn;
   $('dSub').textContent = `${f.date} · ${CLS_NAME[f.cls]} · ${f.actype || 'tipo ?'}${f.wtc ? ' / ' + f.wtc : ''} · Mode S ${f.modes || '—'}`;
@@ -228,6 +230,14 @@ function openDetail(f, pts) {
     tb.insertAdjacentHTML('beforeend', `<tr><td>${p.tod}</td><td>${fmt(p.alt)}</td><td>${p.ias == null ? '—' : Math.round(p.ias)}</td><td>${p.gs == null ? '—' : Math.round(p.gs)}</td><td>${p.roc == null ? '—' : Math.round(p.roc)}</td><td>${d.toFixed(1)} NM</td></tr>`);
   }
   drawProfile(rows, f);
+  renderDetailViol(d);
+}
+function renderDetailViol(d) {
+  const el = $('dViol'); if (!el) return; let h = '';
+  if (d && d.final && d.final.length) h += d.final.map(r => `<div>🛬 Aterragem RWY ${r.rwy} · THR ${r.tTHRstr} · FAF ${r.tFAFstr} · IAS FAF ${C.fmt(r.iasFAF)} kt · ${r.stab ? 'estabilizada' : '<span class="bad">não estabilizada</span>'}</div>`).join('');
+  if (d && d.app) { const v = d.app.points.filter(p => p.ias != null); h += '<div style="margin-top:4px"><b>Velocidades APP</b> RWY ' + d.app.rwy + ': ' + v.map(p => `${p.point} ${C.fmt(p.ias)}/${p.limit} <span class="${Math.abs(p.deviation) > d.tol && !/^THR/i.test(p.point) ? 'bad' : ''}">${p.deviation >= 0 ? '+' : ''}${C.fmt(p.deviation)}</span>`).join(' · ') + '</div>'; }
+  if (d && d.star && d.star.length) h += '<div style="margin-top:4px"><b>Velocidades STAR</b>: ' + d.star.map(v => `<span class="bad">${v.wp} ${C.fmt(v.ias)}/${v.limit} (+${C.fmt(v.excess)})</span>`).join(' · ') + '</div>';
+  el.innerHTML = h || '<span class="muted">Corre as análises (Final, STAR, APP) para ver avaliações deste voo.</span>';
 }
 function drawProfile(rows, f) {
   const c = $('dChart'), ctx = c.getContext('2d');
@@ -300,7 +310,9 @@ function selectLastDay() {
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tabpane').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  $('mapTools').style.visibility = name === 'map' ? 'visible' : 'hidden';
   if (name === 'map') setTimeout(() => map.invalidateSize(), 50);
+  if (window.Analyses) Analyses.onTab(name);
 }
 
 /* ------------------------------------------------------------- Boot */
@@ -318,6 +330,7 @@ async function boot() {
   } catch (e) { status(e.message, 'err'); toast(e.message, 'err'); }
 }
 
+window.FP = { state, call, toast, status, showTab, selectFlight, get map() { return map; }, get overlay() { return overlayGroup; }, THR, AIRPORT_CENTER, fmt };
 document.addEventListener('DOMContentLoaded', () => {
   $('btnImport').onclick = () => importFolder(false);
   $('btnReimport').onclick = () => importFolder(true);
@@ -335,8 +348,10 @@ document.addEventListener('DOMContentLoaded', () => {
   $('chkColorCls').onchange = () => { renderFlightList(); drawTracks(); };
   $('chkTiles').onchange = e => { e.target.checked ? tiles.addTo(map) : map.removeLayer(tiles); };
   $('dClose').onclick = () => selectFlight(state.selected, false);
+  $('dReport').onclick = () => { if (state.selected != null) call('report', 'voo', { flight_id: state.selected }).catch(e => toast(e.message, 'err')); };
   $('btnExport').onclick = async () => { try { const p = await call('export_flights_csv', state.airport, [...state.days], [...state.blocks], $('inpCsn').value.trim(), $('selCls').value); if (p) toast('Exportado para ' + p, 'ok'); } catch (e) { toast(e.message, 'err'); } };
   document.querySelectorAll('.tab').forEach(t => t.onclick = () => showTab(t.dataset.tab));
+  document.querySelectorAll('.subtab').forEach(t => t.onclick = () => { const par = t.parentElement; par.querySelectorAll('.subtab').forEach(x => x.classList.toggle('active', x === t)); par.parentElement.querySelectorAll('.subpane').forEach(p => p.classList.toggle('active', p.id === 'sub-' + t.dataset.sub)); if (window.Analyses) Analyses.onSub(t.dataset.sub); });
   document.querySelectorAll('#flTable th').forEach(th => th.onclick = () => { const k = th.dataset.k; state.sortAsc = state.sortKey === k ? !state.sortAsc : true; state.sortKey = k; renderTable(); });
   if (api()) boot(); else window.addEventListener('pywebviewready', boot);
 });

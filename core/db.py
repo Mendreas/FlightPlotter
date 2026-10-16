@@ -85,6 +85,8 @@ class Database:
         CREATE TABLE IF NOT EXISTS nmir(
             csn VARCHAR, date VARCHAR, actype VARCHAR, wtc VARCHAR)""")
         c.execute("CREATE TABLE IF NOT EXISTS meta(key VARCHAR PRIMARY KEY, value VARCHAR)")
+        c.execute("CREATE TABLE IF NOT EXISTS analysis_cache(key VARCHAR PRIMARY KEY, flight_id INTEGER, value VARCHAR, created TIMESTAMP DEFAULT current_timestamp)")
+        c.execute("CREATE TABLE IF NOT EXISTS user_points(name VARCHAR PRIMARY KEY, lat DOUBLE, lon DOUBLE, descr VARCHAR)")
         if c.execute("SELECT count(*) FROM nmir").fetchone()[0] == 0:
             seed = resource_path("data", "nmir_seed.csv")
             if seed.exists():
@@ -301,6 +303,7 @@ class Database:
     def rebuild_flights(self):
         """Reconstrói a tabela de movimentos a partir de points (rápido: window functions)."""
         self.con.execute("DELETE FROM flights")
+        self.con.execute("DELETE FROM analysis_cache")
         self.con.execute(f"""
         INSERT INTO flights
         WITH ordered AS (
@@ -412,6 +415,88 @@ class Database:
             WHERE s.flight_id = ? ORDER BY p.tod_sec""", [flight_id]).fetchall()
         keys = ["tod", "tod_sec", "lat", "lon", "alt", "ias", "tas", "gs", "roc", "modea", "modes", "trknr", "block"]
         return [dict(zip(keys, r)) for r in rows]
+
+    def points_bulk(self, flight_ids: Iterable[int]) -> dict[int, list[tuple]]:
+        """Todos os plots dos movimentos pedidos, ordenados por tempo.
+        Tuplo: (tod_sec, lat, lon, alt, ias, gs, roc, tas, tod, block, modea)."""
+        ids = list(flight_ids)
+        if not ids:
+            return {}
+        rows = self.con.execute("""
+            WITH sel AS (SELECT * FROM flights WHERE flight_id IN (SELECT unnest(?::INTEGER[])))
+            SELECT s.flight_id, p.tod_sec, p.lat, p.lon, p.alt, p.ias, p.gs, p.roc, p.tas, p.tod, p.block, p.modea
+            FROM sel s JOIN points p
+              ON p.airport = s.airport AND p.date = s.date AND p.csn = s.csn
+             AND p.tod_sec BETWEEN s.t_first AND s.t_last
+            WHERE p.tod_sec IS NOT NULL
+            ORDER BY s.flight_id, p.tod_sec""", [ids]).fetchall()
+        out: dict[int, list] = {}
+        for r in rows:
+            out.setdefault(r[0], []).append(r[1:])
+        return out
+
+    def points_with_approach(self, flight_ids: Iterable[int], rwys: dict) -> dict[int, list[tuple]]:
+        """Plots + coordenadas no eixo de aproximação (along/cross em NM) calculadas em SQL para cada pista.
+        rwys: {rid: {"thr": (lat, lon), "brg": deg}}. Tuplo: (epoch_s, lat, lon, alt, ias, along_r1, cross_r1, along_r2, cross_r2, ...)."""
+        ids = list(flight_ids)
+        if not ids:
+            return {}
+        cols = []
+        for rid, r in rwys.items():
+            tl, tn, brg = r["thr"][0], r["thr"][1], r["brg"]
+            d = (f"3440.065*2*asin(sqrt(pow(sin(radians(p.lat-({tl}))/2),2)+cos(radians({tl}))*cos(radians(p.lat))"
+                 f"*pow(sin(radians(p.lon-({tn}))/2),2)))")
+            br = (f"(degrees(atan2(sin(radians(p.lon-({tn})))*cos(radians(p.lat)),"
+                  f"cos(radians({tl}))*sin(radians(p.lat))-sin(radians({tl}))*cos(radians(p.lat))*cos(radians(p.lon-({tn})))))+360)%360")
+            delta = f"((({br})-({(brg + 180) % 360})+540)%360-180)"
+            cols.append(f"{d}*cos(radians({delta})) AS along_{rid}, {d}*sin(radians({delta})) AS cross_{rid}")
+        rows = self.con.execute(f"""
+            WITH sel AS (SELECT * FROM flights WHERE flight_id IN (SELECT unnest(?::INTEGER[])))
+            SELECT s.flight_id,
+                   (CASE WHEN s.date ~ '^[0-9]{{6}}$' THEN date_diff('day', DATE '2000-01-01', try_strptime(s.date, '%y%m%d')::DATE) ELSE 0 END)*86400 + p.tod_sec AS ep,
+                   p.lat, p.lon, p.alt, p.ias, {', '.join(cols)}
+            FROM sel s JOIN points p
+              ON p.airport = s.airport AND p.date = s.date AND p.csn = s.csn
+             AND p.tod_sec BETWEEN s.t_first AND s.t_last
+            WHERE p.tod_sec IS NOT NULL AND p.lat IS NOT NULL AND p.lon IS NOT NULL AND p.lat <> 0 AND p.lon <> 0
+            ORDER BY s.flight_id, p.tod_sec""", [ids]).fetchall()
+        out: dict[int, list] = {}
+        for r in rows:
+            out.setdefault(r[0], []).append(r[1:])
+        return out
+
+    def cache_get(self, keys: Iterable[str]) -> dict[str, str]:
+        keys = list(keys)
+        if not keys:
+            return {}
+        return dict(self.con.execute("SELECT key, value FROM analysis_cache WHERE key IN (SELECT unnest(?::VARCHAR[]))", [keys]).fetchall())
+
+    def cache_put(self, items: list[tuple[str, int, str]]):
+        if items:
+            keys = [i[0] for i in items]; fids = [i[1] for i in items]; vals = [i[2] for i in items]
+            self.con.execute(
+                "INSERT OR REPLACE INTO analysis_cache(key, flight_id, value) "
+                "SELECT * FROM (SELECT unnest(?::VARCHAR[]) k, unnest(?::INTEGER[]) f, unnest(?::VARCHAR[]) v)", [keys, fids, vals])
+
+    def cache_clear(self):
+        self.con.execute("DELETE FROM analysis_cache")
+
+    def user_points(self) -> list[dict]:
+        return [{"name": n, "lat": la, "lon": lo, "desc": d or "Ponto manual", "type": "user"}
+                for n, la, lo, d in self.con.execute("SELECT name, lat, lon, descr FROM user_points ORDER BY name").fetchall()]
+
+    def user_point_add(self, name: str, lat: float, lon: float, desc: str = "Ponto manual"):
+        self.con.execute("INSERT OR REPLACE INTO user_points VALUES (?,?,?,?)", [name.upper().strip(), float(lat), float(lon), desc])
+
+    def user_point_remove(self, name: str):
+        self.con.execute("DELETE FROM user_points WHERE name=?", [name.upper().strip()])
+
+    def setting_get(self, key: str, default=None):
+        r = self.con.execute("SELECT value FROM meta WHERE key=?", [key]).fetchone()
+        return r[0] if r else default
+
+    def setting_set(self, key: str, value: str):
+        self.con.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", [key, value])
 
     def stats(self, airport: str, dates: Iterable[str], blocks: Iterable[str]) -> dict:
         dates = list(dates) or ["__none__"]

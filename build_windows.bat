@@ -24,7 +24,7 @@ echo [1/3] A instalar dependencias...
 if errorlevel 1 goto :erro
 echo [2/3] A gerar executavel...
 %PY% -m PyInstaller --noconfirm --clean --onedir --windowed --name FlightPlotter ^
-  --add-data "ui;ui" --add-data "data;data" --collect-all duckdb --collect-all webview --hidden-import openpyxl app.py
+  --add-data "ui;ui" --add-data "data;data" --collect-all duckdb --collect-all webview --collect-all pptx --hidden-import openpyxl app.py
 if errorlevel 1 goto :erro
 echo [3/3] Concluido: pasta dist\FlightPlotter (correr FlightPlotter.exe la dentro)
 pause
