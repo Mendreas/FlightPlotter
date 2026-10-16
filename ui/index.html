@@ -38,34 +38,36 @@
 <main id="main">
   <aside id="sidebar">
     <section class="box">
-      <div class="box-h">Aeroporto</div>
-      <select id="selAirport" class="inp"></select>
-    </section>
-    <section class="box">
-      <div class="box-h">Dias <span class="mini" id="dayCount"></span>
-        <span class="box-tools"><a href="#" id="daysAll">todos</a> · <a href="#" id="daysNone">nenhum</a> · <a href="#" id="daysLast">último</a></span>
-      </div>
-      <div id="dayList" class="daylist"></div>
-    </section>
-    <section class="box">
-      <div class="box-h">Blocos horários</div>
+      <div class="box-h">Filtro de datas</div>
+      <div class="lbl">Mês disponível</div>
+      <select id="selMonth" class="inp"></select>
+      <div class="lbl">Dias disponíveis</div>
+      <div class="cal-head"><span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span></div>
+      <div id="calGrid" class="cal"></div>
+      <div class="lbl">Dias da semana</div>
+      <div id="wdBtns" class="chips"></div>
+      <div class="lbl">Blocos horários</div>
       <div id="blockChips" class="chips"></div>
+      <div class="grid2b">
+        <button class="btn sm" id="daysAll">TODOS DIAS</button><button class="btn sm" id="blocksAll">TODOS BLOCOS</button>
+        <button class="btn sm" id="daysNone">NENHUM DIA</button><button class="btn sm" id="blocksNone">NENHUM BLOCO</button>
+      </div>
+      <button class="btn primary wide" id="btnApply">▶ APLICAR FILTRO</button>
     </section>
     <section class="box">
-      <div class="box-h">Filtros</div>
-      <div class="row">
-        <input id="inpCsn" class="inp" placeholder="Callsign (ex: TAP, RYR12)">
-        <select id="selCls" class="inp small">
-          <option value="">Todos</option><option value="arr">Chegadas</option><option value="dep">Partidas</option><option value="lvl">Sobrevoos</option>
-        </select>
+      <input id="inpCsn" class="inp" placeholder="🔍 TAP, KLM, BAW...">
+      <div class="grid4b" id="clsBtns">
+        <button class="tog on" data-v="">TODOS</button><button class="tog" data-v="arr">▼ ARR</button><button class="tog" data-v="dep">▲ DEP</button><button class="tog" data-v="lvl">— NÍVEL</button>
       </div>
-      <button class="btn primary wide" id="btnApply">▶ Aplicar filtro</button>
+    </section>
+    <section class="box">
+      <div class="box-h">Aeroporto <span class="mini">(muda a vista, não descarta dados)</span></div>
+      <div id="aptChips" class="chips"></div>
     </section>
     <section class="box grow">
-      <div class="box-h">Movimentos <span class="mini" id="flCount"></span>
-        <span class="box-tools"><a href="#" id="flShowAll">mostrar todos</a> · <a href="#" id="flHideAll">esconder</a></span>
-      </div>
-      <div id="flList" class="fllist"><div class="empty">Importa uma pasta e aplica um filtro.</div></div>
+      <div class="box-h">Voos <span class="mini" id="flCount"></span></div>
+      <div id="flList" class="fllist"><div class="empty">Importa uma pasta, escolhe mês e dias e aplica o filtro.</div></div>
+      <div class="grid2b"><button class="btn sm" id="flShowAll">TODOS</button><button class="btn sm" id="flHideAll">NENHUM</button></div>
     </section>
   </aside>
 

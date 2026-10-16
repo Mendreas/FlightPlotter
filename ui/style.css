@@ -172,3 +172,24 @@ tr.rowsel{background:#1d3a66!important}tr.clk{cursor:pointer}
 .hint{font-size:11px;color:var(--muted)}
 .hbars{display:flex;flex-direction:column;gap:3px}.hb{display:flex;align-items:center;gap:8px;font-size:11px}.hb-l{min-width:90px;font-family:var(--mono)}.hb-bar{flex:1;height:10px;background:var(--bg);border-radius:5px;overflow:hidden}.hb-bar i{display:block;height:100%}.hb-v{min-width:60px;text-align:right;font-family:var(--mono)}
 .chart-svg{width:100%;height:auto;display:block;font-family:var(--mono);font-size:10px}.chart-svg .lbl{fill:#8a93a6}.chart-svg .ax{stroke:#24314d}
+
+/* ---------- sidebar v2 (estilo da app antiga) ---------- */
+#sidebar{width:300px}
+.lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 4px}
+.cal-head{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:10px;color:var(--muted);text-align:center;margin-bottom:3px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal .d{border:1px solid var(--line);border-radius:6px;padding:3px 0 2px;text-align:center;cursor:pointer;background:var(--bg);line-height:1.1}
+.cal .d b{display:block;font-family:var(--mono);font-size:12px;font-weight:600}.cal .d i{font-style:normal;font-size:9px;color:var(--muted)}
+.cal .d:hover{border-color:var(--accent)}.cal .d.on{background:#1d3a66;border-color:var(--accent)}.cal .d.off{opacity:.25;cursor:default}
+.cal .pad{visibility:hidden}
+.chips .chip.blk{border-color:#2f9e78;color:#8ee0c0}.chips .chip.blk.on{background:#145a44;border-color:#35c46a;color:#fff}
+.grid2b{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px}.grid4b{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px}
+.btn.sm{padding:4px 6px;font-size:10px;letter-spacing:.04em}
+.grid4b .tog{padding:4px 2px;font-size:10px}
+.fl.card2{display:block;border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin:4px 2px}
+.fl.card2 .top{display:flex;align-items:center;gap:6px}.fl.card2 .csn{min-width:0;flex:1}
+.fl.card2 .meta{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px;padding-left:15px}
+.fl.card2 input{margin-left:auto;accent-color:var(--accent)}
+.fl.card2.sel{border-color:var(--accent)}
+.apt{border:1px solid var(--line);border-radius:20px;padding:4px 10px;font-size:11px;cursor:pointer;color:var(--muted);font-family:var(--mono)}
+.apt.on{background:#1d3a66;border-color:var(--accent);color:#fff}.apt b{color:var(--txt)}

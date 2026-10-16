@@ -20,6 +20,7 @@ class Service:
         self.db = db
         self.airport = "LPPT"; self.dates: list[str] = []; self.blocks: list[str] = []; self.csn = ""; self.cls = ""
         self.flights: list[dict] = []
+        self.all_flights: list[dict] = []
         self.reset_results()
         self.ia_history: list[dict] = []
 
@@ -29,11 +30,24 @@ class Service:
         self.point_rows = None; self.point_name = None; self.seq = None
 
     # ------------------------------------------------------------- filtro
-    def set_filter(self, airport, dates, blocks, csn="", cls=""):
-        self.airport, self.dates, self.blocks, self.csn, self.cls = airport, list(dates), list(blocks), csn or "", cls or ""
-        self.flights = self.db.flights_list(airport, dates, blocks, csn, cls)
+    def set_filter(self, dates, blocks, csn="", cls="", airport=None):
+        """Carrega os movimentos de TODOS os aeroportos para os dias/blocos; o aeroporto activo só filtra a vista."""
+        self.dates, self.blocks, self.csn, self.cls = list(dates), list(blocks), csn or "", cls or ""
+        self.all_flights = self.db.flights_list(None, dates, blocks, csn, cls)
+        airports = sorted({f["airport"] for f in self.all_flights})
+        if airport and airport in airports:
+            self.airport = airport
+        elif self.airport not in airports and airports:
+            self.airport = "LPPT" if "LPPT" in airports else airports[0]
+        self.flights = [f for f in self.all_flights if f["airport"] == self.airport]
         self.reset_results()
-        return self.flights
+        return {"flights": self.all_flights, "airport": self.airport, "airports": airports}
+
+    def set_airport(self, airport: str):
+        self.airport = airport
+        self.flights = [f for f in self.all_flights if f["airport"] == airport]
+        self.reset_results()
+        return len(self.flights)
 
     def _by_id(self, fid: int) -> dict | None:
         return next((f for f in self.flights if f["flight_id"] == fid), None)

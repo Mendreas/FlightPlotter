@@ -140,8 +140,11 @@ class Api:
             return {"ok": False, "error": str(e)}
 
     # ---------------------------------------------------------------- consultas
-    def get_flights(self, airport, dates, blocks, csn="", cls=""):
-        return self._safe(self.svc.set_filter, airport, dates, blocks, csn or "", cls or "")
+    def get_flights(self, dates, blocks, csn="", cls="", airport=None):
+        return self._safe(self.svc.set_filter, dates, blocks, csn or "", cls or "", airport)
+
+    def set_airport(self, airport):
+        return self._safe(self.svc.set_airport, airport)
 
     # ---------------------------------------------------------------- análises
     def run_final(self, rwy="BOTH", faf=7, corr=2, alt=1000):
@@ -270,7 +273,7 @@ class Api:
         return self._safe(self.db.flight_points, int(flight_id))
 
     def get_stats(self, airport, dates, blocks):
-        return self._safe(self.db.stats, airport, dates, blocks)
+        return self._safe(self.db.stats, airport or None, dates, blocks)
 
     def export_flights_csv(self, airport, dates, blocks, csn="", cls=""):
         try:

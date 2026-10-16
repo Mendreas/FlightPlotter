@@ -359,12 +359,15 @@ class Database:
         blocks = [r[0] for r in c.execute("SELECT DISTINCT block FROM files ORDER BY 1").fetchall()]
         return {"airports": airports, "dates": dates, "blocks": blocks}
 
-    def flights_list(self, airport: str, dates: Iterable[str], blocks: Iterable[str],
+    def flights_list(self, airport: str | None, dates: Iterable[str], blocks: Iterable[str],
                      csn: str = "", cls: str = "") -> list[dict]:
+        """airport=None → todos os aeroportos."""
         dates = list(dates) or ["__none__"]
         blocks = list(blocks)
-        params: list = [airport, dates]
-        where = ["airport = ?", "date IN (SELECT unnest(?::VARCHAR[]))"]
+        params: list = [dates]
+        where = ["date IN (SELECT unnest(?::VARCHAR[]))"]
+        if airport:
+            where.insert(0, "airport = ?"); params.insert(0, airport)
         if blocks:
             # o movimento é mostrado se tocar em pelo menos um dos blocos seleccionados
             where.append("EXISTS (SELECT 1 FROM unnest(string_split(blocks, ',')) AS u(b) "
@@ -380,7 +383,7 @@ class Database:
             SELECT flight_id, airport, date, csn, leg, n, tod_first, tod_last, t_first, t_last,
                    alt_first, alt_last, alt_min, alt_max, cls, modes, actype, wtc, blocks
             FROM flights WHERE {' AND '.join(where)}
-            ORDER BY date, t_first""", params).fetchall()
+            ORDER BY date, airport, t_first""", params).fetchall()
         keys = ["flight_id", "airport", "date", "csn", "leg", "n", "tod_first", "tod_last", "t_first", "t_last",
                 "alt_first", "alt_last", "alt_min", "alt_max", "cls", "modes", "actype", "wtc", "blocks"]
         return [dict(zip(keys, r)) for r in rows]
@@ -498,13 +501,14 @@ class Database:
     def setting_set(self, key: str, value: str):
         self.con.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", [key, value])
 
-    def stats(self, airport: str, dates: Iterable[str], blocks: Iterable[str]) -> dict:
+    def stats(self, airport: str | None, dates: Iterable[str], blocks: Iterable[str]) -> dict:
         dates = list(dates) or ["__none__"]
-        r = self.con.execute("""
+        r = self.con.execute(f"""
             SELECT count(*), sum(CASE WHEN cls='arr' THEN 1 ELSE 0 END),
                    sum(CASE WHEN cls='dep' THEN 1 ELSE 0 END), sum(CASE WHEN cls='lvl' THEN 1 ELSE 0 END),
                    coalesce(sum(n),0), count(DISTINCT csn)
-            FROM flights WHERE airport=? AND date IN (SELECT unnest(?::VARCHAR[]))""", [airport, dates]).fetchone()
+            FROM flights WHERE {'airport=? AND ' if airport else ''}date IN (SELECT unnest(?::VARCHAR[]))""",
+            ([airport] if airport else []) + [dates]).fetchone()
         return {"flights": r[0], "arr": r[1] or 0, "dep": r[2] or 0, "lvl": r[3] or 0, "points": int(r[4]), "csn": r[5]}
 
     def import_nmir_xlsx(self, path: str) -> int:

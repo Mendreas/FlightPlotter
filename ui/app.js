@@ -13,10 +13,13 @@ const THR = { LPPT: { '02': [38.766428, -9.143903], '20': [38.792331, -9.130047]
 const AIRPORT_CENTER = { LPPT: [38.78, -9.14], LPFR: [37.02, -7.97], LPMA: [32.70, -16.77], LPPR: [41.25, -8.68] };
 
 const state = {
-  filters: null, airport: 'LPPT', days: new Set(), blocks: new Set(),
-  flights: [], byId: new Map(), hidden: new Set(), selected: null,
+  filters: null, airport: 'LPPT', airports: [], month: null, days: new Set(), blocks: new Set(), clsView: '',
+  allFlights: [], flights: [], byId: new Map(), hidden: new Set(), selected: null,
   tracks: {}, layers: new Map(), points: null, sortKey: 'date', sortAsc: true,
 };
+const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const dateObj = d => new Date(2000 + +d.slice(0, 2), +d.slice(2, 4) - 1, +d.slice(4, 6));
 
 /* ------------------------------------------------------------- API bridge */
 function api() { return window.pywebview && window.pywebview.api; }
@@ -106,73 +109,115 @@ function drawTracks() {
 }
 
 /* ------------------------------------------------------------- Filters UI */
+function dayInfo() { // agrega todos os aeroportos por dia
+  const m = new Map();
+  for (const d of state.filters.dates) { const e = m.get(d.date) || { date: d.date, files: 0, rows: 0, airports: new Set() }; e.files += d.files; e.rows += d.rows; e.airports.add(d.airport); m.set(d.date, e); }
+  return m;
+}
 function renderFilters() {
   const f = state.filters;
-  const selA = $('selAirport'); selA.innerHTML = '';
-  for (const a of f.airports) selA.insertAdjacentHTML('beforeend', `<option value="${a}">${a}</option>`);
-  if (!f.airports.includes(state.airport)) state.airport = f.airports[0] || 'LPPT';
-  selA.value = state.airport;
-  renderDays(); renderBlocks();
+  const months = [...new Set(f.dates.map(d => d.date.slice(0, 4)))].sort();
+  const sel = $('selMonth'); sel.innerHTML = months.map(m => `<option value="${m}">${MONTHS[+m.slice(2, 4) - 1]} 20${m.slice(0, 2)}</option>`).join('');
+  if (!months.includes(state.month)) state.month = months[months.length - 1] || null;
+  if (state.month) sel.value = state.month;
+  renderCalendar(); renderBlocks();
 }
-function renderDays() {
-  const list = $('dayList'); list.innerHTML = '';
-  const days = state.filters.dates.filter(d => d.airport === state.airport);
-  for (const d of days) {
-    const on = state.days.has(d.date);
-    list.insertAdjacentHTML('beforeend',
-      `<label title="${d.files} ficheiro(s) · ${fmt(d.rows)} plots · blocos ${d.blocks}"><input type="checkbox" data-d="${d.date}" ${on ? 'checked' : ''}> ${d.label} <span class="n">${d.files}</span></label>`);
+function renderCalendar() {
+  const grid = $('calGrid'); grid.innerHTML = '';
+  if (!state.month) { grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Sem dados importados.</div>'; $('wdBtns').innerHTML = ''; return; }
+  const info = dayInfo(), yy = +state.month.slice(0, 2), mm = +state.month.slice(2, 4);
+  const first = new Date(2000 + yy, mm - 1, 1), nDays = new Date(2000 + yy, mm, 0).getDate();
+  for (let i = 0; i < first.getDay(); i++) grid.insertAdjacentHTML('beforeend', '<div class="d pad"></div>');
+  for (let day = 1; day <= nDays; day++) {
+    const key = state.month + String(day).padStart(2, '0'), e = info.get(key);
+    const el = document.createElement('div'); el.className = 'd' + (e ? (state.days.has(key) ? ' on' : '') : ' off');
+    el.innerHTML = `<b>${day}</b><i>${e ? e.files : ''}</i>`;
+    if (e) { el.title = `${fmt(e.rows)} plots · ${[...e.airports].join(', ')}`; el.onclick = () => { state.days.has(key) ? state.days.delete(key) : state.days.add(key); el.classList.toggle('on'); updDayCount(); }; }
+    grid.appendChild(el);
   }
-  if (!days.length) list.innerHTML = '<div class="empty" style="grid-column:1/-1">Sem dados para este aeroporto.</div>';
-  list.querySelectorAll('input').forEach(i => i.onchange = () => { i.checked ? state.days.add(i.dataset.d) : state.days.delete(i.dataset.d); updDayCount(); });
+  $('wdBtns').innerHTML = WD.map((w, i) => `<span class="chip" data-wd="${i}">${w}</span>`).join('');
+  $('wdBtns').querySelectorAll('.chip').forEach(c => c.onclick = () => {
+    const keys = [...info.keys()].filter(k => k.startsWith(state.month) && dateObj(k).getDay() === +c.dataset.wd);
+    const allOn = keys.length && keys.every(k => state.days.has(k)); keys.forEach(k => allOn ? state.days.delete(k) : state.days.add(k)); renderCalendar();
+  });
   updDayCount();
 }
-function updDayCount() { $('dayCount').textContent = state.days.size ? `(${state.days.size} selecionados)` : ''; }
+function updDayCount() { const n = state.days.size; document.querySelector('#sidebar .box-h').innerHTML = `Filtro de datas <span class="mini">${n ? `(${n} dia${n > 1 ? 's' : ''} selecionado${n > 1 ? 's' : ''})` : ''}</span>`; }
 function renderBlocks() {
   const c = $('blockChips'); c.innerHTML = '';
   for (const b of state.filters.blocks) {
-    const el = document.createElement('span'); el.className = 'chip' + (state.blocks.has(b) ? ' on' : ''); el.textContent = b;
+    const el = document.createElement('span'); el.className = 'chip blk' + (state.blocks.has(b) ? ' on' : ''); el.textContent = b;
     el.onclick = () => { state.blocks.has(b) ? state.blocks.delete(b) : state.blocks.add(b); el.classList.toggle('on'); };
     c.appendChild(el);
   }
 }
+function renderAirports() {
+  const c = $('aptChips'); c.innerHTML = '';
+  const counts = new Map(); state.allFlights.forEach(f => counts.set(f.airport, (counts.get(f.airport) || 0) + 1));
+  const list = state.airports.length ? state.airports : (state.filters ? state.filters.airports : []);
+  for (const a of list) {
+    const el = document.createElement('span'); el.className = 'apt' + (a === state.airport ? ' on' : '');
+    el.innerHTML = `${a}${counts.has(a) ? ` <b>${fmt(counts.get(a))}</b>` : ''}`;
+    el.onclick = () => switchAirport(a);
+    c.appendChild(el);
+  }
+}
+async function switchAirport(a) {
+  if (a === state.airport) return;
+  state.airport = a; renderAirports();
+  if (state.allFlights.length) { try { await call('set_airport', a); } catch (e) { toast(e.message, 'err'); } }
+  applyAirportView();
+  map.setView(AIRPORT_CENTER[a] || AIRPORT_CENTER.LPPT, 10);
+  if (window.Analyses) Analyses.onFilter();
+}
+function applyAirportView() {
+  state.flights = state.allFlights.filter(f => f.airport === state.airport);
+  state.byId = new Map(state.flights.map(f => [f.flight_id, f]));
+  state.hidden.clear(); state.selected = null; closeDetail();
+  applyClsView(); renderFlightList(); renderTable(); drawTracks();
+  const arr = state.flights.filter(f => f.cls === 'arr').length, dep = state.flights.filter(f => f.cls === 'dep').length;
+  status(`${state.airport}: ${state.flights.length} movimento(s) · ${arr} chegadas · ${dep} partidas · ${state.days.size} dia(s) · ${fmt(state.allFlights.length)} no total (todos os aeroportos)`, 'on', $('sTime').textContent);
+  $('tblInfo').textContent = `${state.flights.length} movimentos em ${state.airport}`;
+}
+function applyClsView() { state.hidden.clear(); const q = ($('inpCsn').value || '').trim().toLowerCase(); state.flights.forEach(f => { if ((state.clsView && f.cls !== state.clsView) || (q && !f.csn.toLowerCase().includes(q))) state.hidden.add(f.flight_id); }); }
 
 /* ------------------------------------------------------------- Flights */
 async function applyFilter() {
-  if (!state.days.size) { toast('Seleciona pelo menos um dia.', 'err'); return; }
+  if (!state.days.size) { toast('Seleciona pelo menos um dia no calendário.', 'err'); return; }
   const t0 = performance.now();
   status('A consultar…', 'busy');
   try {
     const dates = [...state.days], blocks = [...state.blocks];
-    state.flights = await call('get_flights', state.airport, dates, blocks, $('inpCsn').value.trim(), $('selCls').value);
-    state.byId = new Map(state.flights.map(f => [f.flight_id, f]));
-    state.hidden.clear(); state.selected = null; closeDetail();
+    const r = await call('get_flights', dates, blocks, '', '', state.airport);
+    state.allFlights = r.flights; state.airports = r.airports; state.airport = r.airport;
     const t1 = performance.now();
-    const tr = await call('get_tracks', state.flights.map(f => f.flight_id));
+    const tr = await call('get_tracks', state.allFlights.map(f => f.flight_id));
     state.tracks = tr.tracks;
     const t2 = performance.now();
-    renderFlightList(); renderTable(); drawTracks();
-    const st = await call('get_stats', state.airport, dates, blocks);
-    const arr = state.flights.filter(f => f.cls === 'arr').length, dep = state.flights.filter(f => f.cls === 'dep').length;
-    status(`${state.flights.length} movimento(s) · ${arr} chegadas · ${dep} partidas · ${fmt(tr.points)} plots desenhados` +
-      (tr.step > 1 ? ` (1 em cada ${tr.step})` : '') + ` · ${dates.length} dia(s)`, 'on',
+    renderAirports(); applyAirportView();
+    status($('sTxt').textContent + (tr.step > 1 ? ` · trajetórias 1 em cada ${tr.step} plots` : ''), 'on',
       `consulta ${Math.round(t1 - t0)} ms · trajetórias ${Math.round(t2 - t1)} ms · total ${Math.round(performance.now() - t0)} ms`);
-    $('tblInfo').textContent = `${state.flights.length} movimentos · ${fmt(st.points)} plots nos dias selecionados`;
     if (window.Analyses) Analyses.onFilter();
   } catch (e) { status('Erro: ' + e.message, 'err'); toast(e.message, 'err'); }
 }
 function renderFlightList() {
   const list = $('flList'); list.innerHTML = '';
-  $('flCount').textContent = `(${state.flights.length})`;
+  const vis = state.flights.filter(f => !state.hidden.has(f.flight_id));
+  $('flCount').textContent = `(${vis.length}${vis.length !== state.flights.length ? ' de ' + state.flights.length : ''})`;
   if (!state.flights.length) { list.innerHTML = '<div class="empty">Nenhum movimento com estes filtros.</div>'; return; }
   const frag = document.createDocumentFragment();
   for (const f of state.flights) {
+    const hid = state.hidden.has(f.flight_id);
+    if (hid && (state.clsView && f.cls !== state.clsView)) continue;
+    const q = ($('inpCsn').value || '').trim().toLowerCase(); if (hid && q && !f.csn.toLowerCase().includes(q)) continue;
     const el = document.createElement('div');
-    el.className = 'fl' + (state.hidden.has(f.flight_id) ? ' off' : '') + (state.selected === f.flight_id ? ' sel' : '');
+    el.className = 'fl card2' + (state.selected === f.flight_id ? ' sel' : '') + (hid ? ' off' : '');
     el.dataset.id = f.flight_id;
-    el.innerHTML = `<span class="sw" style="background:${colorFor(f)}"></span><span class="csn">${f.csn}</span>` +
-      `<span class="typ">${f.actype || ''}</span><span class="badge ${f.cls}">${f.cls.toUpperCase()}</span><span class="t">${f.tod_first.slice(0, 5)}</span>`;
-    el.onclick = ev => { if (ev.shiftKey) toggleHidden(f.flight_id); else selectFlight(f.flight_id, true); };
-    el.title = `${f.date} · ${f.tod_first}–${f.tod_last} · ${f.n} plots · Shift+clique: mostrar/esconder`;
+    const arrow = f.cls === 'arr' ? '▼' : f.cls === 'dep' ? '▲' : '—';
+    el.innerHTML = `<div class="top"><span class="sw" style="background:${colorFor(f)}"></span><span class="csn">${f.csn}</span><span class="badge ${f.cls}">${arrow} ${f.cls.toUpperCase()}</span>${f.actype ? `<span class="typ">${f.actype}</span>` : ''}<input type="checkbox" ${hid ? '' : 'checked'} title="Mostrar no mapa"></div>` +
+      `<div class="meta">${f.n} pts · ${f.tod_first} → ${f.tod_last}${state.days.size > 1 ? ' · ' + f.date.slice(4, 6) + '/' + f.date.slice(2, 4) : ''}</div>`;
+    el.querySelector('input').onclick = ev => { ev.stopPropagation(); toggleHidden(f.flight_id); };
+    el.onclick = () => selectFlight(f.flight_id, true);
     frag.appendChild(el);
   }
   list.appendChild(frag);
@@ -277,7 +322,7 @@ window.onImportDone = async r => {
   if (d.errors) msg += `\n${d.errors} com erro:\n` + d.error_list.join('\n');
   toast(msg, d.errors ? 'err' : 'ok');
   await refreshState(); await loadFilters();
-  if (d.new > 0 && !state.days.size) { selectLastDay(); applyFilter(); }
+  if (d.new > 0 && !state.days.size) { selectLastDay(); applyFilter(); } else if (d.new > 0) renderFilters();
 };
 async function importFolder(useLast) {
   try {
@@ -302,10 +347,11 @@ async function refreshState() {
 }
 async function loadFilters() { state.filters = await call('get_filters'); renderFilters(); }
 function selectLastDay() {
-  const days = state.filters.dates.filter(d => d.airport === state.airport);
-  state.days = new Set(days.length ? [days[days.length - 1].date] : []);
+  const days = [...dayInfo().keys()].sort();
+  const last = days[days.length - 1];
+  state.days = new Set(last ? [last] : []); if (last) state.month = last.slice(0, 4);
   state.blocks = new Set(state.filters.blocks);
-  renderDays(); renderBlocks();
+  renderFilters();
 }
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
@@ -324,7 +370,7 @@ async function boot() {
     const pts = await call('get_points'); state.points = pts;
     const sg = $('selGroup'); sg.innerHTML = '<option value="ALL">Todos os pontos</option>';
     for (const g of Object.keys(pts.groups)) sg.insertAdjacentHTML('beforeend', `<option value="${g}">${g}</option>`);
-    drawPoints();
+    drawPoints(); renderAirports();
     if (s.files > 0) { selectLastDay(); applyFilter(); }
     else status('Sem dados. Clica "Importar pasta…" e escolhe a pasta com os CSV do CNS.', 'on');
   } catch (e) { status(e.message, 'err'); toast(e.message, 'err'); }
@@ -337,13 +383,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnNmir').onclick = async () => { try { const n = await call('import_nmir'); if (n != null) { toast(`${fmt(n)} registo(s) NMIR adicionados.`, 'ok'); await refreshState(); applyFilter(); } } catch (e) { toast(e.message, 'err'); } };
   $('btnFolder').onclick = () => call('open_data_folder').catch(e => toast(e.message, 'err'));
   $('btnApply').onclick = applyFilter;
-  $('inpCsn').onkeydown = e => { if (e.key === 'Enter') applyFilter(); };
-  $('selAirport').onchange = e => { state.airport = e.target.value; state.days.clear(); renderDays(); map.setView(AIRPORT_CENTER[state.airport] || AIRPORT_CENTER.LPPT, 10); };
-  $('daysAll').onclick = e => { e.preventDefault(); state.filters.dates.filter(d => d.airport === state.airport).forEach(d => state.days.add(d.date)); renderDays(); };
-  $('daysNone').onclick = e => { e.preventDefault(); state.days.clear(); renderDays(); };
-  $('daysLast').onclick = e => { e.preventDefault(); selectLastDay(); };
-  $('flShowAll').onclick = e => { e.preventDefault(); state.hidden.clear(); renderFlightList(); drawTracks(); };
-  $('flHideAll').onclick = e => { e.preventDefault(); state.flights.forEach(f => state.hidden.add(f.flight_id)); renderFlightList(); drawTracks(); };
+  $('inpCsn').oninput = () => { applyClsView(); renderFlightList(); drawTracks(); };
+  $('clsBtns').querySelectorAll('.tog').forEach(b => b.onclick = () => { state.clsView = b.dataset.v; $('clsBtns').querySelectorAll('.tog').forEach(x => x.classList.toggle('on', x === b)); applyClsView(); renderFlightList(); drawTracks(); });
+  $('selMonth').onchange = e => { state.month = e.target.value; renderCalendar(); };
+  $('daysAll').onclick = () => { [...dayInfo().keys()].filter(k => k.startsWith(state.month)).forEach(k => state.days.add(k)); renderCalendar(); };
+  $('daysNone').onclick = () => { state.days.clear(); renderCalendar(); };
+  $('blocksAll').onclick = () => { state.filters.blocks.forEach(b => state.blocks.add(b)); renderBlocks(); };
+  $('blocksNone').onclick = () => { state.blocks.clear(); renderBlocks(); };
+  $('flShowAll').onclick = () => { state.hidden.clear(); renderFlightList(); drawTracks(); };
+  $('flHideAll').onclick = () => { state.flights.forEach(f => state.hidden.add(f.flight_id)); renderFlightList(); drawTracks(); };
   $('chkPoints').onchange = drawPoints; $('selGroup').onchange = drawPoints;
   $('chkColorCls').onchange = () => { renderFlightList(); drawTracks(); };
   $('chkTiles').onchange = e => { e.target.checked ? tiles.addTo(map) : map.removeLayer(tiles); };
