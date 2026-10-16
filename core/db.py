@@ -128,8 +128,14 @@ class Database:
             line, enc = raw.decode("latin-1"), "latin-1"
         line = line.rstrip("\r\n")
         sep = ";" if line.count(";") >= line.count(",") else ","
-        cols = [c.strip().strip('"').lower() for c in line.split(sep)]
-        return cols, enc
+        cols, seen = [], set()
+        for c in line.split(sep):
+            c = c.strip().strip('"').lower() or "col"
+            base, k = c, 1
+            while c in seen:            # cabeçalhos repetidos -> col, col_2, ...
+                k += 1; c = f"{base}_{k}"
+            seen.add(c); cols.append(c)
+        return cols, enc, sep
 
     @staticmethod
     def _pick(cols: list[str], key: str):
@@ -139,7 +145,7 @@ class Database:
         return None
 
     def _build_select(self, cols: list[str]) -> tuple[str, str]:
-        """Devolve (lista SELECT, cláusula WHERE) para um grupo de ficheiros com o mesmo cabeçalho."""
+        """Devolve (SELECT interno, SELECT externo, WHERE) para um grupo de ficheiros com o mesmo cabeçalho."""
         pick = {k: self._pick(cols, k) for k in COLUMN_CANDIDATES}
         if not (pick["lat"] and pick["lon"] and pick["csn"] and pick["tod"]):
             raise RuntimeError("faltam colunas (csn/tod/latitude/longitude). Cabeçalhos: " + ", ".join(cols[:12]))
@@ -151,36 +157,54 @@ class Database:
         def num(k):
             return f"TRY_CAST(replace({q(k)}, ',', '.') AS DOUBLE)"
 
-        alt_raw = f"COALESCE({num('modec')}, {num('baroh')})"
-        alt_expr = f"CAST(round(CASE WHEN {alt_raw} < 600 THEN {alt_raw}*100 ELSE {alt_raw} END) AS INTEGER)"
         tod = q("tod")
         tod_sec = (f"TRY_CAST(split_part({tod}, ':', 1) AS INTEGER)*3600 + "
                    f"TRY_CAST(split_part({tod}, ':', 2) AS INTEGER)*60 + "
                    f"TRY_CAST(replace(split_part({tod}, ':', 3), ',', '.') AS DOUBLE)")
-        select = f"""t.file_id, t.airport, t.date, t.block,
-               upper({q('csn')}), {tod}, {tod_sec},
-               {num('lat')}, {num('lon')}, {alt_expr},
-               {num('tas')}, {num('ias')}, {num('roc')}, {num('gs')},
-               {q('modes')}, {q('modea')}, {q('trknr')}"""
-        where = (f"{num('lat')} IS NOT NULL AND {num('lon')} IS NOT NULL "
-                 f"AND {q('csn')} IS NOT NULL AND {q('csn')} <> ''")
+        # 1ª fase: cada expressão calculada UMA vez; 2ª fase (select) só deriva
+        inner = f"""t.file_id, t.airport, t.date, t.block,
+               upper({q('csn')}) AS csn, {tod} AS tod, {tod_sec} AS tod_sec,
+               {num('lat')} AS lat, {num('lon')} AS lon,
+               COALESCE({num('modec')}, {num('baroh')}) AS alt_raw,
+               {num('tas')} AS tas, {num('ias')} AS ias, {num('roc')} AS roc, {num('gs')} AS gs,
+               {q('modes')} AS modes, {q('modea')} AS modea, {q('trknr')} AS trknr"""
+        select = """file_id, airport, date,
+               CASE WHEN tod_sec IS NULL THEN block
+                    WHEN tod_sec < 14400 THEN '00-04' WHEN tod_sec < 28800 THEN '04-08'
+                    WHEN tod_sec < 43200 THEN '08-12' WHEN tod_sec < 57600 THEN '12-16'
+                    WHEN tod_sec < 72000 THEN '16-20' ELSE '20-24' END,
+               csn, tod, tod_sec, lat, lon,
+               CAST(round(CASE WHEN alt_raw < 600 THEN alt_raw*100 ELSE alt_raw END) AS INTEGER),
+               tas, ias, roc, gs, modes, modea, trknr"""
+        where = "lat IS NOT NULL AND lon IS NOT NULL AND csn IS NOT NULL AND csn <> ''"
+        return inner, select, where
         return select, where
+
+    def _log(self, msg: str):
+        try:
+            with open(Path(self.path).with_name("import.log"), "a", encoding="utf-8") as fh:
+                fh.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
+        except Exception:  # noqa: BLE001
+            pass
 
     def _import_batch(self, paths: list[str]) -> tuple[int, list[str]]:
         """Importa vários CSV de uma vez (agrupados por cabeçalho). Devolve (linhas, erros)."""
+        t_batch = time.time()
+        mb = sum(os.path.getsize(p) for p in paths) / 1048576
         errors = []
         groups: dict[tuple, list[tuple[str, str]]] = {}
         for p in paths:
             try:
-                cols, enc = self._read_header(p)
-                groups.setdefault((tuple(cols), enc), []).append(p)
+                cols, enc, sep = self._read_header(p)
+                groups.setdefault((tuple(cols), enc, sep), []).append(p)
             except Exception as e:  # noqa: BLE001
                 errors.append(f"{os.path.basename(p)}: {e}")
         c = self.con
         total_rows = 0
-        for (cols, enc), plist in groups.items():
+        for (cols, enc, sep), plist in groups.items():
+            coltypes = {c: "VARCHAR" for c in cols}
             try:
-                select, where = self._build_select(list(cols))
+                inner, select, where = self._build_select(list(cols))
             except Exception as e:  # noqa: BLE001
                 errors.extend(f"{os.path.basename(p)}: {e}" for p in plist)
                 continue
@@ -197,11 +221,12 @@ class Database:
             try:
                 c.execute(f"""
                     INSERT INTO points
-                    SELECT {select}
-                    FROM read_csv(?, header=true, all_varchar=true, ignore_errors=true, null_padding=true,
-                                  union_by_name=true, filename=true, encoding=?) r
-                    JOIN pending t ON t.path = r.filename
-                    WHERE {where}""", [plist, enc])
+                    SELECT {select} FROM (
+                        SELECT {inner}
+                        FROM read_csv(?, delim=?, header=true, columns=?, auto_detect=false, ignore_errors=true,
+                                      null_padding=true, filename=true, encoding=?) r
+                        JOIN pending t ON t.path = r.filename
+                    ) WHERE {where}""", [plist, sep, coltypes, enc])
             except Exception as e:  # noqa: BLE001
                 errors.extend(f"{os.path.basename(p)}: {e}" for p in plist)
                 continue
@@ -217,12 +242,13 @@ class Database:
                     WHEN s.tmin < 12*3600 THEN '08-12' WHEN s.tmin < 16*3600 THEN '12-16'
                     WHEN s.tmin < 20*3600 THEN '16-20' ELSE '20-24' END
                 FROM pstat s WHERE s.file_id = pending.file_id""")
-            c.execute("UPDATE points SET block = t.block FROM pending t WHERE t.file_id = points.file_id AND points.block <> t.block")
             c.execute("""
                 INSERT INTO files(file_id,path,name,size,mtime,airport,date,block,n_rows)
                 SELECT p.file_id, p.path, p.name, p.size, p.mtime, p.airport, p.date, p.block, coalesce(s.n,0)
                 FROM pending p LEFT JOIN pstat s USING(file_id)""")
             total_rows += c.execute("SELECT coalesce(sum(n),0) FROM pstat").fetchone()[0]
+        self._log(f"lote de {len(paths)} ficheiros ({mb:.1f} MB) -> {int(total_rows)} linhas em {time.time()-t_batch:.1f}s"
+                  + (f" | erros: {len(errors)}" if errors else ""))
         return int(total_rows), errors
 
     def import_file(self, path: str) -> int:
@@ -236,6 +262,10 @@ class Database:
                       batch_size: int = 24) -> dict:
         t0 = time.time()
         todo, total_found = self.pending_files(folder)
+        self._log(f"== importar {folder}: {len(todo)} novos de {total_found} (scan {time.time()-t0:.1f}s)")
+        if progress and todo:
+            mb = sum(os.path.getsize(p) for p in todo) / 1048576
+            progress(0, len(todo), f"{len(todo)} ficheiro(s) novos, {mb:,.0f} MB — a ler…")
         done = rows = 0
         err_list: list[str] = []
         for i in range(0, len(todo), batch_size):
@@ -248,8 +278,11 @@ class Database:
         if todo:
             if progress:
                 progress(done, len(todo), "a construir tabela de movimentos…")
+            t_r = time.time()
             self.rebuild_flights()
+            self._log(f"rebuild_flights {time.time()-t_r:.1f}s")
         self.con.execute("INSERT OR REPLACE INTO meta VALUES ('last_folder', ?)", [folder])
+        self._log(f"== fim: {rows} linhas, {len(err_list)} erros, total {time.time()-t0:.1f}s")
         return {"found": total_found, "new": len(todo), "imported": len(todo) - len(err_list), "errors": len(err_list),
                 "rows": rows, "ms": int((time.time() - t0) * 1000), "error_list": err_list[:20]}
 

@@ -19,7 +19,7 @@ CSV do CNS ──(importa 1 vez)──►  base DuckDB local  ──(SQL, ms)─
 * **NMIR**: a base já inclui 46 060 registos callsign→tipo de aeronave; novos Excel NMIR
   importam-se pelo botão *NMIR…*.
 
-A base fica em `%LOCALAPPDATA%\FlightPlotter\` (botão 🗄 abre a pasta).
+A base fica em `%LOCALAPPDATA%\FlightPlotter\` (botão 🗄 abre a pasta). Aí fica também o `import.log` com os tempos de cada importação.
 
 ## Correr em desenvolvimento (Windows)
 
@@ -29,7 +29,7 @@ A base fica em `%LOCALAPPDATA%\FlightPlotter\` (botão 🗄 abre a pasta).
 
 ## Gerar o executável
 
-* Localmente: duplo clique em `build_windows.bat` → `dist\FlightPlotter.exe`
+* Localmente: duplo clique em `build_windows.bat` → pasta `dist\FlightPlotter\` (correr o `FlightPlotter.exe` lá dentro; para dar a um colega copia-se a pasta inteira)
 * Automático: cada *push* para `main` gera o `.exe` no GitHub Actions
   (separador *Actions* → último run → *Artifacts* → `FlightPlotter-windows`).
 

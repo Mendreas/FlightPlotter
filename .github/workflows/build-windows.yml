@@ -17,11 +17,11 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Gerar executável
         run: >
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name FlightPlotter
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name FlightPlotter
           --add-data "ui;ui" --add-data "data;data" --collect-all duckdb --collect-all webview
           --hidden-import openpyxl app.py
-      - name: Publicar artefacto
+      - name: Publicar artefacto (pasta FlightPlotter com o .exe dentro)
         uses: actions/upload-artifact@v4
         with:
           name: FlightPlotter-windows
-          path: dist/FlightPlotter.exe
+          path: dist/FlightPlotter
