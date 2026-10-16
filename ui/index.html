@@ -22,6 +22,8 @@
     <span class="pill"><b id="dbFlights">0</b> movimentos</span>
     <span class="pill muted" id="dbSize"></span>
   </div>
+  <div class="aptsel"><span class="mini">Aeroporto:</span>
+    <select id="selAirportTop" class="inp" title="Muda a vista para este aeroporto — os dados dos outros mantêm-se carregados"></select></div>
   <div class="actions">
     <button class="btn primary" id="btnImport" title="Escolher uma pasta com CSV do CNS (subpastas incluídas)">📂 Importar pasta…</button>
     <button class="btn" id="btnReimport" title="Procura ficheiros novos na última pasta importada">🔄 Atualizar</button>
@@ -59,10 +61,6 @@
       <div class="grid4b" id="clsBtns">
         <button class="tog on" data-v="">TODOS</button><button class="tog" data-v="arr">▼ ARR</button><button class="tog" data-v="dep">▲ DEP</button><button class="tog" data-v="lvl">— NÍVEL</button>
       </div>
-    </section>
-    <section class="box">
-      <div class="box-h">Aeroporto <span class="mini">(muda a vista, não descarta dados)</span></div>
-      <div id="aptChips" class="chips"></div>
     </section>
     <section class="box grow">
       <div class="box-h">Voos <span class="mini" id="flCount"></span></div>

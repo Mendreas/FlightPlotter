@@ -151,17 +151,13 @@ function renderBlocks() {
     c.appendChild(el);
   }
 }
+const AIRPORT_NAMES = { LPPT: 'Lisboa (LPPT)', LPPR: 'Porto (LPPR)', LPFR: 'Faro (LPFR)', LPMA: 'Funchal (LPMA)' };
 function renderAirports() {
-  const c = $('aptChips'); c.innerHTML = '';
+  const sel = $('selAirportTop');
   const counts = new Map(); state.allFlights.forEach(f => counts.set(f.airport, (counts.get(f.airport) || 0) + 1));
   const inDb = new Set(state.filters ? state.filters.airports : []);
-  for (const a of ['LPPT', 'LPPR', 'LPFR', 'LPMA']) {
-    const el = document.createElement('span'); el.className = 'apt' + (a === state.airport ? ' on' : '') + (inDb.has(a) ? '' : ' nodata');
-    el.innerHTML = `${a}${counts.has(a) ? ` <b>${fmt(counts.get(a))}</b>` : inDb.has(a) ? '' : ' <i>sem dados</i>'}`;
-    el.title = inDb.has(a) ? `${a} — ${counts.get(a) || 0} movimento(s) no filtro actual` : `${a} — nenhum ficheiro importado deste aeroporto`;
-    el.onclick = () => switchAirport(a);
-    c.appendChild(el);
-  }
+  sel.innerHTML = ['LPPT', 'LPPR', 'LPFR', 'LPMA'].map(a => `<option value="${a}">${AIRPORT_NAMES[a]}${counts.has(a) ? ` — ${fmt(counts.get(a))} mov.` : inDb.has(a) ? '' : ' — sem dados'}</option>`).join('');
+  sel.value = state.airport;
 }
 async function switchAirport(a) {
   if (a === state.airport) return;
@@ -387,6 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('inpCsn').oninput = () => { applyClsView(); renderFlightList(); drawTracks(); };
   $('clsBtns').querySelectorAll('.tog').forEach(b => b.onclick = () => { state.clsView = b.dataset.v; $('clsBtns').querySelectorAll('.tog').forEach(x => x.classList.toggle('on', x === b)); applyClsView(); renderFlightList(); drawTracks(); });
   $('selMonth').onchange = e => { state.month = e.target.value; renderCalendar(); };
+  $('selAirportTop').onchange = e => switchAirport(e.target.value);
   $('daysAll').onclick = () => { [...dayInfo().keys()].filter(k => k.startsWith(state.month)).forEach(k => state.days.add(k)); renderCalendar(); };
   $('daysNone').onclick = () => { state.days.clear(); renderCalendar(); };
   $('blocksAll').onclick = () => { state.filters.blocks.forEach(b => state.blocks.add(b)); renderBlocks(); };
