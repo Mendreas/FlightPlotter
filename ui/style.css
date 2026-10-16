@@ -84,6 +84,7 @@ a:hover{text-decoration:underline}
 .tabpane.active{display:flex;flex-direction:column}
 #map{flex:1;background:#0f1a2e}
 .leaflet-container{background:#0f1a2e}
+.tiles-dark{filter:invert(1) hue-rotate(190deg) brightness(.85) contrast(.9) saturate(.5)}
 .legend{position:absolute;right:12px;bottom:30px;background:rgba(17,26,44,.92);border:1px solid var(--line);border-radius:7px;padding:6px 10px;display:flex;gap:12px;font-size:11px;z-index:400}
 .legend i{display:inline-block;width:14px;height:3px;margin-right:5px;vertical-align:middle;border-radius:2px}
 .leaflet-tooltip{background:var(--panel2);color:var(--txt);border:1px solid var(--line);font-family:var(--mono);font-size:11px}

@@ -51,9 +51,14 @@ function nearestThr(airport, latlon) {
 let map, tiles, trackGroup, pointGroup, hiLayer;
 function initMap() {
   map = L.map('map', { zoomControl: true, preferCanvas: true }).setView(AIRPORT_CENTER.LPPT, 10);
-  tiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap · © CARTO', maxZoom: 18 });
-  tiles.on('tileerror', () => { if (!tiles._warned) { tiles._warned = true; toast('Sem acesso ao mapa de fundo (sem internet?). As trajetórias continuam visíveis.', 'err'); } });
+  const BASES = {
+    osm:  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19, className: 'tiles-dark' }),
+    sat:  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri', maxZoom: 18 }),
+    ruas: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri', maxZoom: 18 }),
+  };
+  tiles = BASES.osm;
+  Object.values(BASES).forEach(t => t.on('tileerror', () => { if (!t._warned) { t._warned = true; toast('Sem acesso ao mapa de fundo (sem internet?). As trajetórias continuam visíveis.', 'err'); } }));
+  $('selBase').onchange = e => { map.removeLayer(tiles); tiles = BASES[e.target.value]; if ($('chkTiles').checked) tiles.addTo(map); };
   tiles.addTo(map);
   trackGroup = L.layerGroup().addTo(map);
   pointGroup = L.layerGroup().addTo(map);
