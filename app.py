@@ -370,15 +370,19 @@ def _free_port() -> int:
 
 
 def _wait_server(port: int, timeout: float = 60.0) -> bool:
+    """Espera pelo motor de dados com uma ligação TCP direta (ignora o proxy do sistema)."""
+    import http.client
     t0 = time.time()
     while time.time() - t0 < timeout:
         try:
-            req = urllib.request.Request(f"http://127.0.0.1:{port}/api", data=b'{"method":"get_state","args":[]}',
-                                         headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(req, timeout=2).read()
-            return True
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            conn.request("POST", "/api", body=b'{"method":"get_state","args":[]}', headers={"Content-Type": "application/json"})
+            r = conn.getresponse(); r.read(); conn.close()
+            if r.status == 200:
+                return True
         except Exception:  # noqa: BLE001
-            time.sleep(0.3)
+            pass
+        time.sleep(0.3)
     return False
 
 
@@ -395,6 +399,8 @@ def _spawn_worker(port: int, log: Path):
 
 
 def main():
+    os.environ.setdefault("NO_PROXY", "127.0.0.1,localhost")
+    os.environ.setdefault("no_proxy", "127.0.0.1,localhost")
     log = setup_logging(data_dir())
     logging.info("=== Flight Plotter %s a arrancar (python %s, frozen=%s) ===", VERSION, sys.version.split()[0], getattr(sys, "frozen", False))
     port = _free_port()
@@ -418,6 +424,8 @@ def main():
     if not use_browser:
         try:
             import webview
+            # WebView2 (Edge/Chromium): nunca passar pelo proxy da rede para o servidor local
+            os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = "--proxy-bypass-list=127.0.0.1;localhost --proxy-server=direct://"
             window = webview.create_window(f"{APP_NAME} {VERSION} — NAV Portugal", url, width=1500, height=940, min_size=(1100, 700),
                                            background_color="#0b1220")
             logging.info("Janela criada; a iniciar webview")
