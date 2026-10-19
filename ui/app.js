@@ -62,7 +62,7 @@ function nearestThr(airport, latlon) {
 let map, tiles, trackGroup, pointGroup, overlayGroup;
 function initMap() {
   map = L.map('map', { zoomControl: true, preferCanvas: true }).setView(AIRPORT_CENTER.LPPT, 10);
-  const BASES = {
+  window.BASES = {
     osm:  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19, className: 'tiles-dark' }),
     sat:  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri', maxZoom: 18 }),
     ruas: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri', maxZoom: 18 }),
@@ -393,12 +393,19 @@ async function boot() {
   } catch (e) { status(e.message, 'err'); toast(e.message, 'err'); }
 }
 
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t; try { localStorage.setItem('fp.theme', t); } catch (e) {}
+  const b = $('btnTheme'); if (b) b.textContent = t === 'light' ? '☀' : '🌙';
+}
+(function () { let t = 'dark'; try { t = localStorage.getItem('fp.theme') || 'dark'; } catch (e) {} document.documentElement.dataset.theme = t; })();
 window.FP = { state, call, toast, status, showTab, selectFlight, get map() { return map; }, get overlay() { return overlayGroup; }, THR, AIRPORT_CENTER, fmt };
 document.addEventListener('DOMContentLoaded', () => {
   $('btnImport').onclick = () => importFolder(false);
   $('btnReimport').onclick = () => importFolder(true);
   $('btnNmir').onclick = async () => { try { const n = await call('import_nmir'); if (n != null) { toast(`${fmt(n)} registo(s) NMIR adicionados.`, 'ok'); await refreshState(); applyFilter(); } } catch (e) { toast(e.message, 'err'); } };
   $('btnFolder').onclick = () => call('open_data_folder').catch(e => toast(e.message, 'err'));
+  applyTheme(document.documentElement.dataset.theme || 'dark');
+  $('btnTheme').onclick = () => applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
   $('btnApply').onclick = applyFilter;
   $('inpCsn').oninput = () => { applyClsView(); renderFlightList(); drawTracks(); };
   $('clsBtns').querySelectorAll('.tog').forEach(b => b.onclick = () => { state.clsView = b.dataset.v; $('clsBtns').querySelectorAll('.tog').forEach(x => x.classList.toggle('on', x === b)); applyClsView(); renderFlightList(); drawTracks(); });
