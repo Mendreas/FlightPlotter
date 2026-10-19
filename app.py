@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-import multiprocessing
+import subprocess
 import os
 import socket
 import time
@@ -382,19 +382,38 @@ def _wait_server(port: int, timeout: float = 60.0) -> bool:
     return False
 
 
+def _spawn_worker(port: int, log: Path):
+    """Lança o motor de dados como processo separado: o próprio .exe (ou python app.py) com --worker."""
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--worker", str(port), str(data_dir()), str(log)]
+    else:
+        cmd = [sys.executable, str(Path(__file__).resolve()), "--worker", str(port), str(data_dir()), str(log)]
+    flags = 0
+    if os.name == "nt":
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return subprocess.Popen(cmd, creationflags=flags, cwd=str(Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve().parent))
+
+
 def main():
-    from core import worker
-    multiprocessing.freeze_support()
     log = setup_logging(data_dir())
     logging.info("=== Flight Plotter %s a arrancar (python %s, frozen=%s) ===", VERSION, sys.version.split()[0], getattr(sys, "frozen", False))
     port = _free_port()
-    proc = multiprocessing.Process(target=worker.run, args=(port, str(data_dir()), str(log)), name="flightplotter-worker", daemon=True)
-    proc.start()
+    proc = _spawn_worker(port, log)
     logging.info("Processo de dados iniciado (pid %s) na porta %s", proc.pid, port)
     url = f"http://127.0.0.1:{port}/index.html"
-    if not _wait_server(port, 120):
-        logging.error("O processo de dados não respondeu a tempo")
-        url = "data:text/html,<h2 style='font-family:sans-serif;padding:40px'>O motor de dados não arrancou. Consulta " + str(log).replace("\\", "/") + "</h2>"
+    ok = _wait_server(port, 60)
+    if not ok:
+        rc = proc.poll()
+        logging.error("O processo de dados não respondeu a tempo (código de saída: %s)", rc)
+        msg = (f"O motor de dados não arrancou (código {rc}). Consulta o ficheiro de registo:\n{log}")
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, msg, "Flight Plotter — erro ao arrancar", 0x10)
+        except Exception:  # noqa: BLE001
+            print(msg)
+        if proc.poll() is None:
+            proc.terminate()
+        return
     use_browser = "--browser" in sys.argv or os.environ.get("FLIGHTPLOTTER_BROWSER") == "1"
     if not use_browser:
         try:
@@ -408,7 +427,7 @@ def main():
             use_browser = True
     if use_browser:
         _run_in_browser(url, port)
-    if proc.is_alive():
+    if proc.poll() is None:
         proc.terminate()
     logging.info("Aplicação terminada")
 
@@ -432,4 +451,8 @@ def _run_in_browser(url: str, port: int):
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) >= 5 and sys.argv[1] == "--worker":
+        from core import worker
+        worker.run(int(sys.argv[2]), sys.argv[3], sys.argv[4])
+    else:
+        main()
