@@ -19,6 +19,12 @@ def _interp(a, b, k):
     return a + k * (b - a)
 
 
+def _k(a_along, b_along, target):
+    """Factor de interpolação entre dois plots; 0 se os plots coincidem (evita divisão por zero)."""
+    d = a_along - b_along
+    return (a_along - target) / d if abs(d) > 1e-9 else 0.0
+
+
 def analyze_flight_approach(flight: dict, pts_raw: list[tuple], ri: int, rwy_id: str, rwy: dict,
                             faf_nm: float, corr_nm: float, alt_thr_max: float) -> dict | None:
     """pts_raw: tuplos (epoch, lat, lon, alt, ias, along_1, cross_1, along_2, cross_2, …); ri = índice da pista (0,1,…)."""
@@ -44,7 +50,7 @@ def analyze_flight_approach(flight: dict, pts_raw: list[tuple], ri: int, rwy_id:
     if thr_idx < 0:
         return None
     pa, pb = pts[thr_idx - 1], pts[thr_idx]
-    kt = pa["along"] / (pa["along"] - pb["along"])
+    kt = _k(pa["along"], pb["along"], 0.0)
     t_thr = _interp(pa["t"], pb["t"], kt)
     alt_thr = _interp(pa["alt"], pb["alt"], kt)
     ias_thr = _interp(pa["ias"], pb["ias"], kt) if pa["ias"] is not None and pb["ias"] is not None else None
@@ -59,7 +65,7 @@ def analyze_flight_approach(flight: dict, pts_raw: list[tuple], ri: int, rwy_id:
     if faf_idx < 0:
         return None
     fa, fb = pts[faf_idx - 1], pts[faf_idx]
-    kf = (fa["along"] - faf_nm) / (fa["along"] - fb["along"])
+    kf = _k(fa["along"], fb["along"], faf_nm)
     t_faf = _interp(fa["t"], fb["t"], kf)
     alt_faf = _interp(fa["alt"], fb["alt"], kf)
     cross_faf = _interp(fa["cross"], fb["cross"], kf)
@@ -71,7 +77,7 @@ def analyze_flight_approach(flight: dict, pts_raw: list[tuple], ri: int, rwy_id:
         a, b = pts[i - 1], pts[i]
         if a["along"] > 4 and b["along"] <= 4:
             if a["ias"] is not None and b["ias"] is not None:
-                ias4 = _interp(a["ias"], b["ias"], (a["along"] - 4) / (a["along"] - b["along"]))
+                ias4 = _interp(a["ias"], b["ias"], _k(a["along"], b["along"], 4.0))
             break
     # F — track miles FAF→THR
     track = dist_nm(lat_faf, lon_faf, pts[faf_idx]["lat"], pts[faf_idx]["lon"])

@@ -26,6 +26,17 @@ AIRPORTS = {
 }
 
 
+def _fix_runway_bearings():
+    """Rumo verdadeiro do eixo calculado entre as duas soleiras (a app antiga usava o rumo magnético do AIP,
+    o que deslocava o eixo ~1,2 NM a 11 NM da THR e invalidava o critério de 'estabilizada')."""
+    for apt in AIRPORTS.values():
+        rws = list(apt["rwys"].items())
+        if len(rws) == 2:
+            (ra, a), (rb, b) = rws
+            a["brg"] = bearing_deg(*a["thr"], *b["thr"])
+            b["brg"] = bearing_deg(*b["thr"], *a["thr"])
+
+
 def dist_nm(lat1, lon1, lat2, lon2) -> float:
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
@@ -75,6 +86,9 @@ def runway_coords_m(lat, lon, thr_lat, thr_lon, rwy_brg):
     while delta <= -180: delta += 360
     dr = math.radians(delta)
     return d * math.cos(dr), d * math.sin(dr)
+
+
+_fix_runway_bearings()
 
 
 def to_dms(deg: float, is_lat: bool) -> str:

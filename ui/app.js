@@ -1,4 +1,4 @@
-/* Flight Plotter v2 — interface (fala com o Python via window.pywebview.api) */
+/* FlightTracker 4 — interface (fala com o Python via window.pywebview.api) */
 'use strict';
 
 const $ = id => document.getElementById(id);

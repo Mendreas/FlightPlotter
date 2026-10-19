@@ -1,7 +1,7 @@
-# Flight Plotter v2
+# FlightTracker 4.0
 
 Análise de trajetórias radar (CSV do CNS) para os aeroportos LPPT, LPPR, LPFR e LPMA.
-Reescrita da antiga app HTML (FlightTracker) com um objetivo: **ler os dados muito mais depressa.**
+Versão 4 do FlightTracker: reescrita em Python/DuckDB (as versões 1–3 eram uma app HTML de ficheiro único) com um objetivo: **ler os dados muito mais depressa.**
 
 ## Como funciona
 
@@ -19,7 +19,7 @@ CSV do CNS ──(importa 1 vez)──►  base DuckDB local  ──(SQL, ms)─
 * **NMIR**: a base já inclui 46 060 registos callsign→tipo de aeronave; novos Excel NMIR
   importam-se pelo botão *NMIR…*.
 
-A base fica em `%LOCALAPPDATA%\FlightPlotter\` (botão 🗄 abre a pasta). Aí fica também o `import.log` com os tempos de cada importação.
+A base fica em `%LOCALAPPDATA%\FlightTracker\` (botão 🗄 abre a pasta). Aí fica também o `import.log` com os tempos de cada importação.
 
 ## Análises disponíveis
 
@@ -45,16 +45,16 @@ As especificações detalhadas dos algoritmos portados da app antiga estão em `
 
 ## Gerar o executável
 
-* Localmente: duplo clique em `build_windows.bat` → pasta `dist\FlightPlotter\` (correr o `FlightPlotter.exe` lá dentro; para dar a um colega copia-se a pasta inteira)
+* Localmente: duplo clique em `build_windows.bat` → pasta `dist\FlightTracker\` (correr o `FlightTracker.exe` lá dentro; para dar a um colega copia-se a pasta inteira)
 * Automático: cada *push* para `main` gera o `.exe` no GitHub Actions
-  (separador *Actions* → último run → *Artifacts* → `FlightPlotter-windows`).
+  (separador *Actions* → último run → *Artifacts* → `FlightTracker-windows`).
 
 ## Se o .exe não abrir noutro PC
 
 A janela nativa usa o WebView2 do Windows via .NET. Se falhar (pasta dentro do OneDrive, DLL bloqueada, PC muito restrito),
 a app **abre automaticamente no navegador predefinido** (Edge/Chrome) — tudo funciona igual. Também podes forçar esse modo
-com `FlightPlotter.exe --browser`. Recomendações para distribuir: copiar a pasta `FlightPlotter` para fora do OneDrive
-(ex.: `C:\FlightPlotter`) e, se o Windows marcar o zip como "transferido da Internet", botão direito no zip → Propriedades → **Desbloquear** antes de extrair.
+com `FlightTracker.exe --browser`. Recomendações para distribuir: copiar a pasta `FlightTracker` para fora do OneDrive
+(ex.: `C:\FlightTracker`) e, se o Windows marcar o zip como "transferido da Internet", botão direito no zip → Propriedades → **Desbloquear** antes de extrair.
 
 ## Dados de teste
 

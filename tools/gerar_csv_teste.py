@@ -1,4 +1,4 @@
-"""Gera CSV sintéticos (formato semelhante ao do CNS) para testar o Flight Plotter sem dados reais.
+"""Gera CSV sintéticos (formato semelhante ao do CNS) para testar o FlightTracker sem dados reais.
 
 Uso:  python tools/gerar_csv_teste.py PASTA_DESTINO [dias] [voos_por_bloco]
 Cria PASTA_DESTINO/LPPT_2604DD_HH-HH.csv para cada dia/bloco.

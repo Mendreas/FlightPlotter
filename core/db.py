@@ -1,4 +1,4 @@
-"""Camada de dados do Flight Plotter — DuckDB.
+"""Camada de dados do FlightTracker — DuckDB.
 
 Ideia central:
   * Importar: cada CSV do CNS é lido UMA vez (DuckDB, multi-thread) e guardado

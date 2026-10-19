@@ -69,7 +69,7 @@ def build_context(flights: list[dict], final_results: list[dict], pairs: list[di
                   rot: dict | None, seq: list[dict] | None, point_rows: list[dict] | None, point_name: str, fast_thr: int = 160) -> str:
     L = []
     cnt = Counter(f["cls"] for f in flights)
-    L.append("DADOS CARREGADOS NO FLIGHT PLOTTER:")
+    L.append("DADOS CARREGADOS NO FLIGHTTRACKER:")
     L.append(f"Total aeronaves: {len(flights)} | ARR: {cnt.get('arr', 0)} | DEP: {cnt.get('dep', 0)} | NVL: {cnt.get('lvl', 0)}")
     if flights:
         L.append(f"Periodo: {min(f['tod_first'] for f in flights)[:5]}-{max(f['tod_last'] for f in flights)[:5]}")

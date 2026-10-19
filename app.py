@@ -1,4 +1,4 @@
-"""Flight Plotter v2 — NAV Portugal / GOPLIS
+"""FlightTracker 4.0 — NAV Portugal / GOPLIS
 Janela de ambiente de trabalho (pywebview) + backend Python/DuckDB.
 
 Arrancar em desenvolvimento:  python app.py
@@ -25,8 +25,8 @@ from core.filenames import date_label
 from core.httpapi import start_server
 from core.service import Service
 
-APP_NAME = "Flight Plotter"
-VERSION = "2.0.0"
+APP_NAME = "FlightTracker"
+VERSION = "4.0.0"
 
 
 def setup_logging(folder: Path):
@@ -40,14 +40,21 @@ def setup_logging(folder: Path):
 
 
 def data_dir() -> Path:
-    """Pasta onde fica a base de dados: %LOCALAPPDATA%\\FlightPlotter (Windows) ou ~/.flightplotter."""
+    """Pasta onde fica a base de dados: %LOCALAPPDATA%\\FlightTracker (Windows) ou ~/.flighttracker."""
     override = os.environ.get("FLIGHTPLOTTER_DATA")
     if override:
         p = Path(override)
     elif os.name == "nt":
-        p = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "FlightPlotter"
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+        p = base / "FlightTracker"
+        old = base / "FlightPlotter"
+        if not p.exists() and old.exists():   # migra a base criada pelas versões 2.x
+            try:
+                old.rename(p)
+            except OSError:
+                p = old
     else:
-        p = Path.home() / ".flightplotter"
+        p = Path.home() / ".flighttracker"
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -70,7 +77,7 @@ class Api:
             logging.exception("Erro a abrir a base de dados")
             msg = str(e)
             if "lock" in msg.lower() or "being used" in msg.lower():
-                msg = "A base de dados está aberta por outro programa — fecha o outro Flight Plotter (Gestor de Tarefas → FlightPlotter.exe) e volta a abrir. " + msg
+                msg = "A base de dados está aberta por outro programa — fecha o outro FlightTracker (Gestor de Tarefas → FlightTracker.exe) e volta a abrir. " + msg
             self.init_error = msg; self.db = None; self.svc = None
 
     # -------------------------------------------------------------- utilidades
@@ -100,7 +107,7 @@ class Api:
     # ------------------------------------------------------------------ estado
     def _state_fn(self):
         if self.init_error:
-            raise RuntimeError("Não foi possível abrir a base de dados (está outro Flight Plotter aberto?). " + self.init_error)
+            raise RuntimeError("Não foi possível abrir a base de dados (está outro FlightTracker aberto?). " + self.init_error)
         s = self.db.summary()
         s["version"] = VERSION
         s["importing"] = self._importing
@@ -402,7 +409,7 @@ def main():
     os.environ.setdefault("NO_PROXY", "127.0.0.1,localhost")
     os.environ.setdefault("no_proxy", "127.0.0.1,localhost")
     log = setup_logging(data_dir())
-    logging.info("=== Flight Plotter %s a arrancar (python %s, frozen=%s) ===", VERSION, sys.version.split()[0], getattr(sys, "frozen", False))
+    logging.info("=== FlightTracker %s a arrancar (python %s, frozen=%s) ===", VERSION, sys.version.split()[0], getattr(sys, "frozen", False))
     port = _free_port()
     proc = _spawn_worker(port, log)
     logging.info("Processo de dados iniciado (pid %s) na porta %s", proc.pid, port)
@@ -414,7 +421,7 @@ def main():
         msg = (f"O motor de dados não arrancou (código {rc}). Consulta o ficheiro de registo:\n{log}")
         try:
             import ctypes
-            ctypes.windll.user32.MessageBoxW(0, msg, "Flight Plotter — erro ao arrancar", 0x10)
+            ctypes.windll.user32.MessageBoxW(0, msg, "FlightTracker — erro ao arrancar", 0x10)
         except Exception:  # noqa: BLE001
             print(msg)
         if proc.poll() is None:
@@ -446,11 +453,11 @@ def _run_in_browser(url: str, port: int):
     webbrowser.open(url)
     try:
         import ctypes
-        ctypes.windll.user32.MessageBoxW(0, "O Flight Plotter abriu no teu navegador (Edge/Chrome).\n\n"
+        ctypes.windll.user32.MessageBoxW(0, "O FlightTracker abriu no teu navegador (Edge/Chrome).\n\n"
                                          "Mantém esta janela aberta enquanto usares a aplicação; fecha-a para terminar.",
-                                         "Flight Plotter", 0x40)
+                                         "FlightTracker", 0x40)
     except Exception:  # noqa: BLE001 — não-Windows ou sem interface
-        print(f"Flight Plotter aberto em {url}. Ctrl+C para terminar.")
+        print(f"FlightTracker aberto em {url}. Ctrl+C para terminar.")
         try:
             while True:
                 time.sleep(3600)

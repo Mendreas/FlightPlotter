@@ -1,4 +1,4 @@
-/* Flight Plotter v2 — abas de análise (Final, Velocidades, Análise Op., KPIs, Pontos, IA, Preferências) */
+/* FlightTracker 4 — abas de análise (Final, Velocidades, Análise Op., KPIs, Pontos, IA, Preferências) */
 'use strict';
 const Analyses = (() => {
   const { esc, fmt } = C;
@@ -383,6 +383,7 @@ const Analyses = (() => {
     $('rotCount').textContent = `${rows.length} aterragem(ns)`;
     const vals = rows.map(r => r.rotS).sort((a, b) => a - b), n = vals.length;
     let h = '<div class="kgrid">' + C.kcard('N.º aterragens', n) + C.kcard('ROT médio', n ? fmt(vals.reduce((a, b) => a + b, 0) / n) + ' s' : '—') + C.kcard('P85', n ? vals[Math.min(Math.floor(n * .85), n - 1)] + ' s' : '—') + C.kcard('P95', n ? vals[Math.min(Math.floor(n * .95), n - 1)] + ' s' : '—') + C.kcard('Máximo', n ? vals[n - 1] + ' s' : '—') + '</div>';
+    if (d.n < d.processed * 0.3) h += '<div class="hint sep-o" style="margin-bottom:8px">⚠ A maioria das chegadas termina antes da pista (cobertura radar até ~250 ft / 1,5 NM da THR) — o ROT só é calculável quando existem plots na rolagem.</div>';
     h += `<div class="hint" style="margin-bottom:8px">ARR processados: ${d.processed} · sem pontos: ${d.dbg.noPts || 0} · THR não detectada: ${d.dbg.noCross || 0} · sem saída de pista: ${d.dbg.noOnRwy || 0} · ROT inválido: ${d.dbg.tooShort || 0} · calculados: ${d.n}</div>`;
     h += C.table([{ k: 'i', label: 'N', fmt: (v, r, i) => i + 1 }, { k: 'rwy', label: 'Pista', fmt: v => rwyBadge(v) }, { k: 'date', label: 'Data' }, { k: 'csn', label: 'Voo', fmt: (v, r) => csnLink(v, r.flight_id) }, { k: 'actype', label: 'Tipo' }, { k: 'tTHRstr', label: 'Hora THR' },
       { k: 'rotS', label: 'ROT (s)', fmt: v => `<span class="${v <= 45 ? 'sep-g' : v <= 60 ? 'sep-o' : 'sep-r'}">${v}</span>` }, { k: 'exitM', label: 'Dist. saída (m)' }], rows, { id: 'rotTable' });

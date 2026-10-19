@@ -168,7 +168,7 @@ def run_rot(db, flights: list[dict], airport: str) -> dict:
             for i in range(1, len(pts)):
                 (a0, c0), (a1, c1) = rc[i - 1], rc[i]
                 if a0 < 0 <= a1 and abs(c0) <= 380 and abs(c1) <= 380 and pts[i][T] - pts[i - 1][T] <= 60:
-                    frac = -a0 / (a1 - a0)
+                    frac = -a0 / (a1 - a0) if abs(a1 - a0) > 1e-9 else 0.0
                     t_thr = pts[i - 1][T] + frac * (pts[i][T] - pts[i - 1][T])
                     last = None
                     for j in range(i, len(pts)):

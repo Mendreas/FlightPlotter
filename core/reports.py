@@ -157,7 +157,7 @@ def wrap(title: str, subtitle: str, body: str, landscape=False) -> str:
     return (f"<!DOCTYPE html><html lang=\"pt\"><head><meta charset=\"utf-8\"><title>{esc(title)}</title><style>{CSS}{size}</style></head>"
             f"<body><button class=\"noprint\" onclick=\"window.print()\" style=\"float:right;padding:6px 14px\">🖨 Imprimir / PDF</button>"
             f"<h1>{esc(title)}</h1><div class=\"sub\">{subtitle}</div>{body}"
-            f"<footer>Flight Plotter — NAV Portugal. Relatório automático gerado em {time.strftime('%d/%m/%Y %H:%M')}. Dados baseados em track radar.</footer></body></html>")
+            f"<footer>FlightTracker — NAV Portugal. Relatório automático gerado em {time.strftime('%d/%m/%Y %H:%M')}. Dados baseados em track radar.</footer></body></html>")
 
 
 # ---------------- relatórios concretos
@@ -215,7 +215,7 @@ def report_flight(flight: dict, pts: list[dict], app_rec: dict | None, star_viol
         body += '<p class="note">Sem dados de violações registados para este voo.</p>'
     body += table(["TOD", "Alt ft", "IAS", "GS", "ROC", "Dist THR"], [[p["tod"], p["alt"], fnum(p["ias"]), fnum(p["gs"]), fnum(p["roc"]),
                                                                        fnum(p.get("dist_thr"), 1) + " NM"] for p in pts], 400) if pts else ""
-    return wrap(f"Relatório {flight['csn']}", f"Relatório de Voo · Flight Plotter · NAV Portugal · {flight['date_fmt']}", body)
+    return wrap(f"Relatório {flight['csn']}", f"Relatório de Voo · FlightTracker · NAV Portugal · {flight['date_fmt']}", body)
 
 
 def report_kpis(k: dict, airport: str) -> str:
@@ -291,8 +291,8 @@ def report_data_analysis(da: dict, airport: str) -> str:
         [[f"{h['hour']}h", h["arrivals"], h["pairs"], h["crit"], h["dep"], f"{h['minSep']} s", fnum(h["avgSep"], 1) + " s"] for h in t["hour"]], 24)
     body += "<h3>Companhias</h3>" + table(["Companhia", "Movimentos", "ARR", "DEP", "Críticos", "Taxa"],
         [[c["company"], c["movements"], c["arr"], c["dep"], c["critical"], f"{c['rate'] * 100:.1f}%"] for c in t["companies"]], 15)
-    body += "<p class='note'>Relatório gerado automaticamente a partir dos dados carregados no Flight Plotter. A timeline interactiva e o detalhe completo de pares estão disponíveis na aplicação e na exportação Excel.</p>"
-    return wrap("Relatório de Análise de Dados", f"Flight Plotter · Separação entre chegadas · {airport} · {time.strftime('%d/%m/%Y')}", body, landscape=True)
+    body += "<p class='note'>Relatório gerado automaticamente a partir dos dados carregados no FlightTracker. A timeline interactiva e o detalhe completo de pares estão disponíveis na aplicação e na exportação Excel.</p>"
+    return wrap("Relatório de Análise de Dados", f"FlightTracker · Separação entre chegadas · {airport} · {time.strftime('%d/%m/%Y')}", body, landscape=True)
 
 
 def report_daily(dy: dict, airport: str, blocks: list[str]) -> str:
@@ -325,7 +325,7 @@ def report_daily(dy: dict, airport: str, blocks: list[str]) -> str:
     body += "<h3>Callsigns comuns</h3>" + table(["Callsign", "Nº dias", "Dias", "Movimentos", "Companhia"], [[c["csn"], c["count"], ", ".join(fmt_date(d) for d in c["days"]), c["movements"], c["company"]] for c in dy["common"]], 20)
     body += "<h3>Resumo por dia e hora (amostra)</h3>" + table(["Data", "Dia", "Hora", "ARR", "DEP", "Movimentos", "Pares", "Críticos"],
         [[h["dateFmt"], h["wd"], f"{h['hour']}h", h["arr"], h["dep"], h["total"], h["pairs"], h["crit"]] for h in dy["hourTable"]], 40)
-    return wrap("Relatório de Análise Diária", f"Flight Plotter · {airport} · {time.strftime('%d/%m/%Y')}", body, landscape=True)
+    return wrap("Relatório de Análise Diária", f"FlightTracker · {airport} · {time.strftime('%d/%m/%Y')}", body, landscape=True)
 
 
 def report_rrms(rr: dict, shown: list[dict], cat_label: str, rwy_label: str) -> str:
@@ -382,4 +382,4 @@ def report_ia(history: list[dict], provider_name: str) -> str:
             if g and g.get("dados"):
                 body += f"<h3>{esc(g.get('titulo', 'Gráfico'))}</h3>" + table(["Item", "Valor"], [[d.get("nome"), d.get("valor")] for d in g["dados"]])
             body += "</div>"
-    return wrap("Análise IA — Flight Plotter", f"Exportado em {time.strftime('%d/%m/%Y %H:%M')}", body)
+    return wrap("Análise IA — FlightTracker", f"Exportado em {time.strftime('%d/%m/%Y %H:%M')}", body)

@@ -303,7 +303,7 @@ class Service:
             html = reports.report_ia(self.ia_history, ia.PROVIDERS.get(self.ia_settings()["provider"], {}).get("name", ""))
         else:
             raise ValueError("Relatório desconhecido")
-        out_dir = os.path.join(tempfile.gettempdir(), "flightplotter_relatorios"); os.makedirs(out_dir, exist_ok=True)
+        out_dir = os.path.join(tempfile.gettempdir(), "flighttracker_relatorios"); os.makedirs(out_dir, exist_ok=True)
         path = os.path.join(out_dir, f"{kind}_{time.strftime('%Y%m%d_%H%M%S')}.html")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(html)
