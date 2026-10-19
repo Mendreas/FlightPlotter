@@ -1,5 +1,6 @@
 @echo off
 REM Gera a pasta dist\FlightPlotter com FlightPlotter.exe (arranque rapido)
+REM Se a janela nativa falhar no PC de destino, a app abre no navegador (ou corre: FlightPlotter.exe --browser)
 REM Requisito: Python 3.11+ de https://www.python.org/downloads/windows/ (marcar "Add python.exe to PATH")
 cd /d "%~dp0"
 set PY=

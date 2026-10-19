@@ -19,9 +19,8 @@ import threading
 import traceback
 from pathlib import Path
 
-import webview
-
 from core.db import Database, resource_path
+FOLDER_DIALOG, OPEN_DIALOG, SAVE_DIALOG = 1, 2, 3  # iguais aos do pywebview
 from core.filenames import date_label
 from core.httpapi import start_server
 from core.service import Service
@@ -131,7 +130,7 @@ class Api:
         if self.init_error:
             return {"ok": False, "error": "Base de dados indisponível: " + self.init_error}
         try:
-            res = self.window.create_file_dialog(webview.FOLDER_DIALOG)
+            res = self.window.create_file_dialog(FOLDER_DIALOG)
             if res:
                 return {"ok": True, "data": res[0] if isinstance(res, (list, tuple)) else res}
             return {"ok": True, "data": None}
@@ -184,7 +183,7 @@ class Api:
 
     def import_nmir(self):
         try:
-            res = self.window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False,
+            res = self.window.create_file_dialog(OPEN_DIALOG, allow_multiple=False,
                                                  file_types=("Excel NMIR (*.xlsx)", "Todos (*.*)"))
             if not res:
                 return {"ok": True, "data": None}
@@ -257,7 +256,7 @@ class Api:
 
     def points_import(self):
         def f():
-            res = self.window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=("JSON (*.json)",))
+            res = self.window.create_file_dialog(OPEN_DIALOG, allow_multiple=False, file_types=("JSON (*.json)",))
             if not res: return None
             path = res[0] if isinstance(res, (list, tuple)) else res
             data = json.load(open(path, encoding="utf-8"))
@@ -274,7 +273,7 @@ class Api:
 
     def points_export(self):
         def f():
-            res = self.window.create_file_dialog(webview.SAVE_DIALOG, save_filename="points.json", file_types=("JSON (*.json)",))
+            res = self.window.create_file_dialog(SAVE_DIALOG, save_filename="points.json", file_types=("JSON (*.json)",))
             if not res: return None
             path = res[0] if isinstance(res, (list, tuple)) else res
             json.dump(self.db.user_points(), open(path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
@@ -288,7 +287,7 @@ class Api:
         def f():
             name = default_name or f"{kind}_{time.strftime('%Y-%m-%d')}.{'csv' if as_csv else 'xlsx'}"
             types = ("CSV (*.csv)",) if as_csv else ("Excel (*.xlsx)",)
-            res = self.window.create_file_dialog(webview.SAVE_DIALOG, save_filename=name, file_types=types)
+            res = self.window.create_file_dialog(SAVE_DIALOG, save_filename=name, file_types=types)
             if not res: return None
             path = res[0] if isinstance(res, (list, tuple)) else res
             return self.svc.export_excel(path, kind, extra or {})
@@ -296,7 +295,7 @@ class Api:
 
     def export_pptx(self):
         def f():
-            res = self.window.create_file_dialog(webview.SAVE_DIALOG, save_filename=f"ias_app_final_{time.strftime('%Y-%m-%d')}.pptx", file_types=("PowerPoint (*.pptx)",))
+            res = self.window.create_file_dialog(SAVE_DIALOG, save_filename=f"ias_app_final_{time.strftime('%Y-%m-%d')}.pptx", file_types=("PowerPoint (*.pptx)",))
             if not res: return None
             path = res[0] if isinstance(res, (list, tuple)) else res
             return self.svc.export_pptx(path)
@@ -331,7 +330,7 @@ class Api:
 
     def export_flights_csv(self, airport, dates, blocks, csn="", cls=""):
         try:
-            res = self.window.create_file_dialog(webview.SAVE_DIALOG, save_filename="movimentos.csv",
+            res = self.window.create_file_dialog(SAVE_DIALOG, save_filename="movimentos.csv",
                                                  file_types=("CSV (*.csv)",))
             if not res:
                 return {"ok": True, "data": None}
@@ -396,18 +395,40 @@ def main():
     if not _wait_server(port, 120):
         logging.error("O processo de dados não respondeu a tempo")
         url = "data:text/html,<h2 style='font-family:sans-serif;padding:40px'>O motor de dados não arrancou. Consulta " + str(log).replace("\\", "/") + "</h2>"
-    window = webview.create_window(f"{APP_NAME} {VERSION} — NAV Portugal", url, width=1500, height=940, min_size=(1100, 700),
-                                   background_color="#0b1220")
-    logging.info("Janela criada; a iniciar webview")
-    try:
-        webview.start(debug="--debug" in sys.argv)
-    except Exception:  # noqa: BLE001
-        logging.exception("webview.start falhou")
-        raise
-    finally:
-        if proc.is_alive():
-            proc.terminate()
+    use_browser = "--browser" in sys.argv or os.environ.get("FLIGHTPLOTTER_BROWSER") == "1"
+    if not use_browser:
+        try:
+            import webview
+            window = webview.create_window(f"{APP_NAME} {VERSION} — NAV Portugal", url, width=1500, height=940, min_size=(1100, 700),
+                                           background_color="#0b1220")
+            logging.info("Janela criada; a iniciar webview")
+            webview.start(debug="--debug" in sys.argv)
+        except BaseException:  # noqa: BLE001 — pythonnet/WebView2 em falta, DLL bloqueada pelo OneDrive, etc.
+            logging.exception("A janela nativa falhou — a abrir no navegador")
+            use_browser = True
+    if use_browser:
+        _run_in_browser(url, port)
+    if proc.is_alive():
+        proc.terminate()
     logging.info("Aplicação terminada")
+
+
+def _run_in_browser(url: str, port: int):
+    """Modo de recurso: interface no navegador predefinido; o processo fica vivo enquanto a página estiver aberta."""
+    import webbrowser
+    webbrowser.open(url)
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, "O Flight Plotter abriu no teu navegador (Edge/Chrome).\n\n"
+                                         "Mantém esta janela aberta enquanto usares a aplicação; fecha-a para terminar.",
+                                         "Flight Plotter", 0x40)
+    except Exception:  # noqa: BLE001 — não-Windows ou sem interface
+        print(f"Flight Plotter aberto em {url}. Ctrl+C para terminar.")
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
 
 
 if __name__ == "__main__":

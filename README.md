@@ -49,6 +49,13 @@ As especificações detalhadas dos algoritmos portados da app antiga estão em `
 * Automático: cada *push* para `main` gera o `.exe` no GitHub Actions
   (separador *Actions* → último run → *Artifacts* → `FlightPlotter-windows`).
 
+## Se o .exe não abrir noutro PC
+
+A janela nativa usa o WebView2 do Windows via .NET. Se falhar (pasta dentro do OneDrive, DLL bloqueada, PC muito restrito),
+a app **abre automaticamente no navegador predefinido** (Edge/Chrome) — tudo funciona igual. Também podes forçar esse modo
+com `FlightPlotter.exe --browser`. Recomendações para distribuir: copiar a pasta `FlightPlotter` para fora do OneDrive
+(ex.: `C:\FlightPlotter`) e, se o Windows marcar o zip como "transferido da Internet", botão direito no zip → Propriedades → **Desbloquear** antes de extrair.
+
 ## Dados de teste
 
 ```
