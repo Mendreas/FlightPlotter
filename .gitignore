@@ -1,9 +1,0 @@
-__pycache__/
-*.pyc
-build/
-dist/
-*.spec
-*.duckdb
-*.duckdb.wal
-csv_teste/
-.venv/

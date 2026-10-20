@@ -1,0 +1,1 @@
+Execute scripts/download-libs.ps1 para descarregar automaticamente as bibliotecas locais.
